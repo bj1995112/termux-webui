@@ -28,8 +28,43 @@ export default function App() {
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
 
+  // ?diag=1: on-device layout probe for right-edge clipping reports. Renders
+  // live numbers so a phone screenshot is enough to pinpoint the culprit.
+  const diag = new URLSearchParams(location.search).get('diag') === '1';
+  useEffect(() => {
+    if (!diag) return;
+    const el = document.getElementById('diag');
+    if (!el) return;
+    let raf = 0;
+    const tick = () => {
+      const host = document.querySelector('.term-host');
+      const scr = (host?.querySelector('.xterm-screen') as HTMLElement | null) ?? null;
+      const vp = host?.querySelector('.xterm-viewport') as HTMLElement | null;
+      const info = [
+        `dpr=${devicePixelRatio}`,
+        `inner=${innerWidth}x${innerHeight}`,
+        `zoom=${Math.round((visualViewport?.scale ?? 1) * 100)}%`,
+        `hostW=${host?.clientWidth ?? '?'}`,
+        `screenW=${scr ? Math.round(scr.getBoundingClientRect().width * 10) / 10 : '?'}`,
+        `styleW=${scr?.style.width || '?'}`,
+        `sbGap=${vp ? vp.offsetWidth - vp.clientWidth : '?'}`,
+        `overflow=${host && scr ? Math.round((scr.getBoundingClientRect().width - host.clientWidth) * 10) / 10 : '?'}`,
+      ];
+      el.textContent = info.join('  ');
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [diag]);
+
   return (
     <div className="flex h-full flex-col">
+      {diag && (
+        <div
+          id="diag"
+          className="pointer-events-none fixed inset-x-0 top-0 z-[999] bg-black/85 px-2 py-1 font-mono text-[10px] leading-4 text-lime-300"
+        />
+      )}
       {/* Top bar */}
       <header className="flex items-center gap-2 border-b border-border bg-panel px-3 py-2">
         <span
