@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0d10;
+  --color-panel: #12151a;
+  --color-panel2: #1a1f27;
+  --color-border: #262c36;
+  --color-text: #e6e9ef;
+  --color-muted: #8b93a3;
+  --color-accent: #4f8cff;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  overscroll-behavior: none;
+  font-family: system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+}

@@ -1,0 +1,15 @@
+{
+  "name": "agentdeck-next",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Universal mobile-first control console for coding agent CLIs",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev:server": "pnpm --filter server dev",
+    "dev:web": "pnpm --filter web dev",
+    "build": "pnpm --filter shared build && pnpm --filter web build",
+    "start": "pnpm --filter server start",
+    "test": "pnpm --filter server test"
+  }
+}

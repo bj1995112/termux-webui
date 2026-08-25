@@ -1,0 +1,11 @@
+packages:
+  - shared
+  - server
+  - web
+allowBuilds:
+  esbuild: true
+  node-pty: true
+enablePrePostScripts: true
+onlyBuiltDependencies:
+  - esbuild
+  - node-pty
