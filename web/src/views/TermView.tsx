@@ -9,7 +9,8 @@ const DARK = {
   background: '#0b0d10',
   foreground: '#e6e9ef',
   cursor: '#4f8cff',
-  selectionBackground: '#2a3f63',
+  // Translucent so selected text stays readable under the highlight.
+  selectionBackground: '#2a3f6399',
 };
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
@@ -110,6 +111,11 @@ export default function TermView({ sessionId, active }: Props) {
     // selection ends — the screen must stay frozen under the user's handles.
     let selecting = false;
     let parked: string[] = [];
+    /** Finger travel since the long-press fired; below this threshold the
+     * selection is not updated, so natural hand tremor never collapses the
+     * freshly created 3-row selection back to the press point. */
+    let selectMoveOrigin: { x: number; y: number } | null = null;
+    const SELECT_MOVE_THRESHOLD = 18;
 
     const off = deckSocket.onMessage((msg) => {
       if (msg.type === 'output' && msg.sessionId === sessionId) {
@@ -222,17 +228,28 @@ export default function TermView({ sessionId, active }: Props) {
         gesture = 'selecting';
         selecting = true;
         parked = [];
-        const cell = cellAt(pressPoint.x, pressPoint.y);
-        if (!cell) return;
-        anchorCellRef.current = cell;
-        // The far handle starts at the opposite screen corner so the two
-        // handles are as far apart as possible — easy to grab either one.
+        selectMoveOrigin = pressPoint;
         const vy = term.buffer.active.viewportY || 0;
-        const topHalf = cell.row < vy + term.rows / 2;
-        const far: Cell = topHalf
-          ? { col: term.cols - 1, row: vy + term.rows - 1 }
-          : { col: 0, row: vy };
-        selectBetween(cell, far);
+        // Keep both handles comfortably inside the screen: ≥2 cells from the
+        // left/right edges and ≥1 row from the top/bottom — handles hugging
+        // the bezel are impossible to grab.
+        const clampCol = (c: number) => Math.max(2, Math.min(term.cols - 3, c));
+        const clampRow = (r: number) => Math.max(vy + 1, Math.min(vy + term.rows - 2, r));
+        const startCell = cellAt(pressPoint.x, pressPoint.y);
+        if (!startCell) return;
+        anchorCellRef.current = {
+          col: clampCol(startCell.col),
+          row: clampRow(startCell.row),
+        };
+        // The second handle sits 5 cells across and 3 rows down from the
+        // press point; when there is no room below, it goes 3 rows up instead.
+        const a = anchorCellRef.current;
+        const roomBelow = a.row + 3 <= vy + term.rows - 2;
+        const b: Cell = {
+          col: clampCol(a.col + 5),
+          row: clampRow(roomBelow ? a.row + 3 : a.row - 3),
+        };
+        selectBetween(a, b);
         navigator.vibrate?.(15);
       }, 250);
     };
@@ -252,15 +269,17 @@ export default function TermView({ sessionId, active }: Props) {
         event.stopPropagation();
         const t = [...event.touches].find((x) => x.identifier === primaryId);
         if (!t) return;
+        // Ignore tremor: only finger travel beyond the threshold starts
+        // stretching the selection.
+        if (selectMoveOrigin) {
+          const travel = Math.hypot(t.clientX - selectMoveOrigin.x, t.clientY - selectMoveOrigin.y);
+          if (travel < SELECT_MOVE_THRESHOLD) return;
+        }
         dragPointer = { x: t.clientX, y: t.clientY };
-        // The long-press anchor stays fixed; the finger stretches the other
-        // end. Using the live normalized end would flip semantics when the
-        // finger crosses the anchor.
         const anchor = anchorCellRef.current;
         if (anchor) {
-          dragWhich = 'b';
-          fixedCell = anchor;
-          applyDrag();
+          const cur = cellAt(dragPointer.x, dragPointer.y);
+          if (cur) selectBetween(anchor, cur);
           stopDragScroll();
           dragFrame = requestAnimationFrame(dragAutoScroll);
         }
@@ -299,6 +318,8 @@ export default function TermView({ sessionId, active }: Props) {
         gesture = 'idle';
         primaryId = null;
         selecting = false;
+        dragPointer = null;
+        stopDragScroll();
         for (const chunk of parked) {
           term.write(chunk, () => {
             if (followRefs.get(sessionId)?.current) term.scrollToBottom();
