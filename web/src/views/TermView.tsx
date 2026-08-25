@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
+import { useDeck } from '../store.js';
 
 const DARK = {
   background: '#0b0d10',
@@ -14,15 +15,52 @@ const DARK = {
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
 
+interface Cell {
+  col: number;
+  row: number; // absolute buffer row
+}
+
 interface Props {
   sessionId: string;
   active: boolean;
+}
+
+async function copyText(text: string): Promise<boolean> {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to legacy path (HTTP LAN / older browsers) */
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
 }
 
 /** One xterm per session, created once and kept alive; switching tabs only
  * toggles visibility so scrollback and running programs stay intact. */
 export default function TermView({ sessionId, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const [handles, setHandles] = useState<{ a: Cell; b: Cell } | null>(null);
+  const [showBar, setShowBar] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
+  const followOutput = useDeck((s) => s.followOutput);
 
   // Create once per session.
   useEffect(() => {
@@ -38,6 +76,7 @@ export default function TermView({ sessionId, active }: Props) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
+    termRef.current = term;
     term.onData((data) => deckSocket.send({ type: 'input', sessionId, data }));
 
     const fitNow = () => {
@@ -53,12 +92,236 @@ export default function TermView({ sessionId, active }: Props) {
     fitFns.set(sessionId, fitNow);
     fitNow();
 
+    // ---- follow output -----------------------------------------------------
+    const followRef = { current: followOutput };
+    followRefs.set(sessionId, followRef);
+    term.onScroll(() => {
+      if (!useDeck.getState().followOutput) {
+        followRef.current = false; // user turned follow off — respect it
+        return;
+      }
+      const buf = term.buffer.active;
+      // Rejoin follow when the user scrolls back near the bottom; leaving the
+      // bottom (any manual scroll) releases it.
+      followRef.current = buf.baseY - buf.viewportY <= 1;
+    });
+
+    // While selecting, incoming output is parked and flushed after the
+    // selection ends — the screen must stay frozen under the user's handles.
+    let selecting = false;
+    let parked: string[] = [];
+
     const off = deckSocket.onMessage((msg) => {
-      if (msg.type === 'output' && msg.sessionId === sessionId) term.write(msg.data);
+      if (msg.type === 'output' && msg.sessionId === sessionId) {
+        if (selecting) {
+          parked.push(msg.data);
+          return;
+        }
+        term.write(msg.data, () => {
+          if (followRefs.get(sessionId)?.current) term.scrollToBottom();
+        });
+      }
       if (msg.type === 'exit' && msg.sessionId === sessionId) {
         term.write(`\r\n\x1b[33m[会话已退出 code=${msg.exitCode}]\x1b[0m\r\n`);
       }
     });
+
+    // ---- long-press selection ---------------------------------------------
+    let pressTimer: number | null = null;
+    let pressPoint: { x: number; y: number } | null = null;
+    let gesture: 'idle' | 'pressed' | 'selecting' = 'idle';
+    let primaryId: number | null = null;
+    let dragWhich: 'a' | 'b' | null = null;
+    let fixedCell: Cell | null = null;
+    let dragFrame: number | null = null;
+    let dragPointer: { x: number; y: number } | null = null;
+    const anchorCellRef: { current: Cell | null } = { current: null };
+
+    const screen = () => host.querySelector('.xterm-screen');
+    const cellAt = (x: number, y: number): Cell | null => {
+      const scr = screen();
+      if (!scr) return null;
+      const rect = scr.getBoundingClientRect();
+      const cw = rect.width / Math.max(term.cols, 1);
+      const chh = rect.height / Math.max(term.rows, 1);
+      const vy = term.buffer.active.viewportY || 0;
+      const col = Math.max(0, Math.min(term.cols - 1, Math.floor((x - rect.left) / cw)));
+      const row = Math.max(0, Math.min(term.rows - 1, Math.floor((y - rect.top) / chh)));
+      return { col, row: row + vy };
+    };
+    const selectBetween = (a: Cell, b: Cell) => {
+      const ai = a.row * term.cols + a.col;
+      const bi = b.row * term.cols + b.col;
+      const first = Math.min(ai, bi);
+      const last = Math.max(ai, bi);
+      term.select(first % term.cols, Math.floor(first / term.cols), Math.max(1, last - first + 1));
+      setHandles({
+        a: { col: first % term.cols, row: Math.floor(first / term.cols) },
+        b: { col: last % term.cols, row: Math.floor(last / term.cols) },
+      });
+    };
+    const applyDrag = () => {
+      if (!dragWhich || !fixedCell || !dragPointer) return;
+      const cur = cellAt(dragPointer.x, dragPointer.y);
+      if (!cur) return;
+      if (dragWhich === 'a') selectBetween(cur, fixedCell);
+      else selectBetween(fixedCell, cur);
+    };
+    const dragAutoScroll = () => {
+      if (!dragPointer || !screen()) {
+        dragFrame = null;
+        return;
+      }
+      const rect = screen()!.getBoundingClientRect();
+      const edge = 44;
+      let speed = 0;
+      if (dragPointer.y < rect.top + edge) speed = -Math.max(1, Math.ceil((rect.top + edge - dragPointer.y) / 10));
+      else if (dragPointer.y > rect.bottom - edge) speed = Math.max(1, Math.ceil((dragPointer.y - (rect.bottom - edge)) / 10));
+      if (!speed) {
+        dragFrame = null;
+        return;
+      }
+      term.scrollLines(speed);
+      applyDrag();
+      dragFrame = requestAnimationFrame(dragAutoScroll);
+    };
+    const stopDragScroll = () => {
+      if (dragFrame) cancelAnimationFrame(dragFrame);
+      dragFrame = null;
+    };
+
+    const onHostTouchStart = (event: TouchEvent) => {
+      const target = event.target as HTMLElement;
+      const handleEl = target?.closest?.('.sel-handle') as HTMLElement | null;
+      if (handleEl) {
+        // Dragging one of the handles: the other end stays fixed.
+        event.preventDefault();
+        event.stopPropagation();
+        if (!term.hasSelection()) return;
+        const t = event.touches[0];
+        if (!t) return;
+        stopInertiaGestures();
+        dragWhich = handleEl.classList.contains('start') ? 'a' : 'b';
+        dragPointer = { x: t.clientX, y: t.clientY };
+        const ends = currentEnds();
+        if (!ends) return;
+        fixedCell = dragWhich === 'a' ? ends.b : ends.a;
+        applyDrag();
+        stopDragScroll();
+        dragFrame = requestAnimationFrame(dragAutoScroll);
+        return;
+      }
+      if (!screen() || event.touches.length > 1) return;
+      const t = event.touches[0];
+      pressPoint = { x: t.clientX, y: t.clientY };
+      primaryId = t.identifier;
+      gesture = 'pressed';
+      if (pressTimer) clearTimeout(pressTimer);
+      pressTimer = window.setTimeout(() => {
+        if (gesture !== 'pressed' || !pressPoint) return;
+        gesture = 'selecting';
+        selecting = true;
+        parked = [];
+        const cell = cellAt(pressPoint.x, pressPoint.y);
+        if (!cell) return;
+        anchorCellRef.current = cell;
+        // The far handle starts at the opposite screen corner so the two
+        // handles are as far apart as possible — easy to grab either one.
+        const vy = term.buffer.active.viewportY || 0;
+        const topHalf = cell.row < vy + term.rows / 2;
+        const far: Cell = topHalf
+          ? { col: term.cols - 1, row: vy + term.rows - 1 }
+          : { col: 0, row: vy };
+        selectBetween(cell, far);
+        navigator.vibrate?.(15);
+      }, 250);
+    };
+
+    const onHostTouchMove = (event: TouchEvent) => {
+      if (dragWhich) {
+        event.preventDefault();
+        event.stopPropagation();
+        const t = event.touches[0];
+        if (t) dragPointer = { x: t.clientX, y: t.clientY };
+        applyDrag();
+        if (!dragFrame) dragFrame = requestAnimationFrame(dragAutoScroll);
+        return;
+      }
+      if (gesture === 'selecting') {
+        event.preventDefault();
+        event.stopPropagation();
+        const t = [...event.touches].find((x) => x.identifier === primaryId);
+        if (!t) return;
+        dragPointer = { x: t.clientX, y: t.clientY };
+        // The long-press anchor stays fixed; the finger stretches the other
+        // end. Using the live normalized end would flip semantics when the
+        // finger crosses the anchor.
+        const anchor = anchorCellRef.current;
+        if (anchor) {
+          dragWhich = 'b';
+          fixedCell = anchor;
+          applyDrag();
+          stopDragScroll();
+          dragFrame = requestAnimationFrame(dragAutoScroll);
+        }
+        return;
+      }
+      if (gesture === 'pressed' && pressPoint) {
+        const t = event.touches[0];
+        if (t && Math.hypot(t.clientX - pressPoint.x, t.clientY - pressPoint.y) > 12) {
+          if (pressTimer) clearTimeout(pressTimer);
+          pressTimer = null;
+          gesture = 'idle'; // it's a scroll, let xterm have it
+        }
+      }
+    };
+
+    const onHostTouchEnd = (event: TouchEvent) => {
+      if (dragWhich) {
+        const t = [...event.changedTouches].find((x) => x.identifier === primaryId);
+        if (primaryId === null || t) {
+          dragWhich = null;
+          fixedCell = null;
+          dragPointer = null;
+          stopDragScroll();
+        }
+        return;
+      }
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
+      if (gesture === 'selecting') {
+        // Only the primary finger ending the gesture finishes selection; a
+        // lifted second finger just means the endpoint returns to the anchor.
+        const stillDown = [...event.touches].some((x) => x.identifier === primaryId);
+        if (stillDown) return;
+        gesture = 'idle';
+        primaryId = null;
+        selecting = false;
+        for (const chunk of parked) {
+          term.write(chunk, () => {
+            if (followRefs.get(sessionId)?.current) term.scrollToBottom();
+          });
+        }
+        parked = [];
+        if (term.hasSelection()) setShowBar(true);
+      } else {
+        gesture = 'idle';
+        primaryId = null;
+      }
+    };
+    const stopInertiaGestures = () => stopDragScroll();
+
+    const currentEnds = () => {
+      // Read back the live selection ends from our own state mirror.
+      return handlesRef.current;
+    };
+
+    host.addEventListener('touchstart', onHostTouchStart, { passive: false, capture: true });
+    host.addEventListener('touchmove', onHostTouchMove, { passive: false, capture: true });
+    host.addEventListener('touchend', onHostTouchEnd, { passive: true, capture: true });
+    host.addEventListener('touchcancel', onHostTouchEnd, { passive: true, capture: true });
 
     const ro = new ResizeObserver(() => requestAnimationFrame(fitNow));
     ro.observe(host);
@@ -69,10 +332,64 @@ export default function TermView({ sessionId, active }: Props) {
     return () => {
       off();
       ro.disconnect();
+      if (pressTimer) clearTimeout(pressTimer);
+      stopDragScroll();
+      host.removeEventListener('touchstart', onHostTouchStart, true);
+      host.removeEventListener('touchmove', onHostTouchMove, true);
+      host.removeEventListener('touchend', onHostTouchEnd, true);
+      host.removeEventListener('touchcancel', onHostTouchEnd, true);
       fitFns.delete(sessionId);
+      followRefs.delete(sessionId);
       term.dispose();
     };
+    // followOutput intentionally not a dep: followRef is synced below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Mirror selection ends for the gesture code (which lives in the effect).
+  const handlesRef = useRef<{ a: Cell; b: Cell } | null>(null);
+  handlesRef.current = handles;
+
+  // Keep followRef in sync with the store toggle.
+  useEffect(() => {
+    const ref = followRefs.get(sessionId);
+    if (termRef.current && ref) ref.current = followOutput;
+  }, [followOutput, sessionId]);
+
+  // Hide/copy-bar cleanup when selection disappears externally.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    const w = term.onSelectionChange(() => {
+      if (!term.hasSelection()) {
+        setHandles(null);
+        setShowBar(false);
+      }
+    });
+    return () => w.dispose();
+  }, [sessionId, active]);
+
+  // Suppress the system keyboard when requested.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const apply = () => {
+      const ta = host.querySelector('textarea');
+      if (!ta) return false;
+      if (suppressKeyboard) {
+        ta.setAttribute('readonly', 'true');
+        ta.setAttribute('inputmode', 'none');
+      } else {
+        ta.removeAttribute('readonly');
+        ta.removeAttribute('inputmode');
+      }
+      return true;
+    };
+    if (!apply()) {
+      const t = window.setTimeout(apply, 150);
+      return () => clearTimeout(t);
+    }
+  }, [suppressKeyboard, sessionId, active]);
 
   // Hide/show on tab switch; refit when becoming visible (geometry may have
   // changed while hidden).
@@ -83,8 +400,71 @@ export default function TermView({ sessionId, active }: Props) {
     if (active) requestAnimationFrame(() => fitFns.get(sessionId)?.());
   }, [active, sessionId]);
 
+  const handleCoords = (which: 'a' | 'b') => {
+    if (!handles) return null;
+    const term = termRef.current;
+    const host = hostRef.current;
+    const scr = host?.querySelector('.xterm-screen');
+    if (!term || !host || !scr) return null;
+    const cell = handles[which];
+    const hostRect = host.getBoundingClientRect();
+    const rect = scr.getBoundingClientRect();
+    const cw = rect.width / Math.max(term.cols, 1);
+    const ch = rect.height / Math.max(term.rows, 1);
+    const vy = term.buffer.active.viewportY || 0;
+    if (cell.row < vy || cell.row >= vy + term.rows) return null; // end scrolled away
+    return {
+      left: rect.left - hostRect.left + cell.col * cw,
+      top: rect.top - hostRect.top + (cell.row - vy) * ch,
+    };
+  };
+  const posA = handleCoords('a');
+  const posB = handleCoords('b');
+
+  const doCopy = async () => {
+    const term = termRef.current;
+    if (!term) return;
+    const ok = await copyText(term.getSelection());
+    if (ok) {
+      navigator.vibrate?.(20);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    }
+  };
+  const doSelectAll = () => {
+    termRef.current?.selectAll();
+    setHandles(null); // whole buffer has no meaningful endpoints
+  };
+  const doCancel = () => {
+    termRef.current?.clearSelection();
+    setHandles(null);
+    setShowBar(false);
+  };
+
   // Absolutely stacked inside <main>(relative): every session occupies the
   // full area, visibility decides who shows. In-flow stacking would push the
   // 2nd+ terminals below the clip and look "blank".
-  return <div className="absolute inset-0 h-full w-full" ref={hostRef} />;
+  return (
+    <div className="absolute inset-0 h-full w-full" ref={hostRef}>
+      {handles && posA && (
+        <div className="sel-handle start" style={{ left: posA.left, top: posA.top }} data-which="a" />
+      )}
+      {handles && posB && (
+        <div className="sel-handle end" style={{ left: posB.left, top: posB.top }} data-which="b" />
+      )}
+      {showBar && (
+        <div className="sel-bar">
+          <button onClick={() => void doCopy()} className="sel-bar-btn primary">
+            {copied ? '已复制✓' : '复制'}
+          </button>
+          <button onClick={doSelectAll} className="sel-bar-btn">全选</button>
+          <button onClick={doCancel} className="sel-bar-btn">取消</button>
+        </div>
+      )}
+    </div>
+  );
 }
+
+/** sessionId → live follow flag shared between the store toggle and the
+ * write callback inside the creation effect. */
+const followRefs = new Map<string, { current: boolean }>();

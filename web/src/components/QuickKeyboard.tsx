@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { deckSocket } from '../lib/ws.js';
+import { useDeck } from '../store.js';
 
 interface KeyDef {
   label: string;
@@ -56,6 +57,10 @@ export default function QuickKeyboard({
   const pointerRef = useRef<{ id: number; x: number; y: number; item: KeyDef; swiped: boolean } | null>(null);
   const [page, setPage] = useState(0);
   const [mods, setMods] = useState({ ctrl: false, alt: false, shift: false });
+  const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
+  const toggleSuppressKeyboard = useDeck((s) => s.toggleSuppressKeyboard);
+  const followOutput = useDeck((s) => s.followOutput);
+  const toggleFollowOutput = useDeck((s) => s.toggleFollowOutput);
   const displayPages = [PAGES[PAGES.length - 1], ...PAGES, PAGES[0]];
 
   useEffect(() => {
@@ -183,6 +188,24 @@ export default function QuickKeyboard({
           ))}
         </div>
         <span className="ml-auto text-xs text-muted">{PAGES[page]?.label}</span>
+        <button
+          onClick={() => toggleFollowOutput()}
+          title={followOutput ? '跟随输出:新内容自动滚到底部' : '自由滑动:输出不拉动画面'}
+          className={`rounded border px-1.5 py-0.5 text-xs ${
+            followOutput ? 'border-accent text-accent' : 'border-border text-muted'
+          }`}
+        >
+          {followOutput ? '📌跟随' : '📍自由'}
+        </button>
+        <button
+          onClick={() => toggleSuppressKeyboard()}
+          title={suppressKeyboard ? '已屏蔽系统键盘,点击恢复' : '点击屏蔽系统键盘'}
+          className={`rounded border px-1.5 py-0.5 text-xs ${
+            suppressKeyboard ? 'border-accent text-accent' : 'border-border text-muted'
+          }`}
+        >
+          {suppressKeyboard ? '⌨︎已屏蔽' : '⌨︎屏蔽'}
+        </button>
         <button onClick={onHide} className="rounded border border-border px-2 py-0.5 text-xs text-muted active:text-text">
           ∨ 收起
         </button>

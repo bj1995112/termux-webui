@@ -6,6 +6,8 @@ interface DeckState {
   sessions: SessionInfo[];
   activeId: string | null;
   keyboardVisible: boolean;
+  suppressKeyboard: boolean;
+  followOutput: boolean;
   loadClis: () => Promise<void>;
   loadSessions: () => Promise<void>;
   createSession: (kind: SessionInfo['kind'], cwd?: string) => Promise<SessionInfo>;
@@ -13,13 +15,22 @@ interface DeckState {
   setActive: (id: string | null) => void;
   removeLocal: (id: string) => void;
   toggleKeyboard: (visible?: boolean) => void;
+  toggleSuppressKeyboard: (value?: boolean) => void;
+  toggleFollowOutput: (value?: boolean) => void;
 }
+
+const boolPref = (key: string, fallback: boolean): boolean => {
+  const saved = localStorage.getItem(key);
+  return saved === null ? fallback : saved === '1';
+};
 
 export const useDeck = create<DeckState>((set, get) => ({
   clis: [],
   sessions: [],
   activeId: null,
   keyboardVisible: true,
+  suppressKeyboard: boolPref('twui.suppressKeyboard', false),
+  followOutput: boolPref('twui.followOutput', true),
 
   loadClis: async () => {
     const res = await fetch('/api/clis');
@@ -71,4 +82,16 @@ export const useDeck = create<DeckState>((set, get) => ({
 
   toggleKeyboard: (visible) =>
     set((s) => ({ keyboardVisible: visible ?? !s.keyboardVisible })),
+
+  toggleSuppressKeyboard: (value) => {
+    const next = value ?? !get().suppressKeyboard;
+    localStorage.setItem('twui.suppressKeyboard', next ? '1' : '0');
+    set({ suppressKeyboard: next });
+  },
+
+  toggleFollowOutput: (value) => {
+    const next = value ?? !get().followOutput;
+    localStorage.setItem('twui.followOutput', next ? '1' : '0');
+    set({ followOutput: next });
+  },
 }));

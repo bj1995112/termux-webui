@@ -18,3 +18,59 @@ html, body, #root {
   overscroll-behavior: none;
   font-family: system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
 }
+
+/* ---- selection handles + action bar ---- */
+.sel-handle {
+  position: absolute;
+  z-index: 45;
+  width: 26px;
+  height: 30px;
+  margin-left: -13px;
+  margin-top: -5px;
+  touch-action: none;
+  cursor: pointer;
+}
+.sel-handle::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--color-accent);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35);
+}
+.sel-handle.start::before { top: 6px; }
+.sel-handle.end::before { bottom: 4px; }
+
+.sel-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  z-index: 46;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+}
+.sel-bar-btn {
+  min-width: 64px;
+  min-height: 38px;
+  padding: 7px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-panel2);
+  color: var(--color-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.sel-bar-btn.primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
