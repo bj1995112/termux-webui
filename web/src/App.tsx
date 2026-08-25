@@ -15,6 +15,9 @@ export default function App() {
   const keyboardVisible = useDeck((s) => s.keyboardVisible);
   const toggleKeyboard = useDeck((s) => s.toggleKeyboard);
   const [showNew, setShowNew] = useState(false);
+  const [wsStatus, setWsStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
+
+  useEffect(() => deckSocket.onStatus(setWsStatus), []);
 
   useEffect(() => {
     deckSocket.connect();
@@ -35,6 +38,12 @@ export default function App() {
     <div className="flex h-full flex-col">
       {/* Top bar */}
       <header className="flex items-center gap-2 border-b border-border bg-panel px-3 py-2">
+        <span
+          title={wsStatus === 'online' ? '已连接' : wsStatus === 'connecting' ? '连接中…' : '连接断开,重试中'}
+          className={`h-2 w-2 flex-shrink-0 rounded-full ${
+            wsStatus === 'online' ? 'bg-emerald-400' : wsStatus === 'connecting' ? 'animate-pulse bg-amber-400' : 'bg-red-500'
+          }`}
+        />
         <span className="text-sm font-bold tracking-wide text-accent">▚ Termux WebUI</span>
         {active && <span className="rounded bg-panel2 px-1.5 py-0.5 text-[10px] text-muted">{active.kind}</span>}
         <button

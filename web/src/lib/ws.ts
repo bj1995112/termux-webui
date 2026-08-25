@@ -1,24 +1,38 @@
 import type { ClientMessage, ServerMessage } from '@termux-webui/shared';
 
 type Handler = (msg: ServerMessage) => void;
+type StatusListener = (status: 'connecting' | 'online' | 'offline') => void;
 
 /** Single WebSocket, multiplexed by sessionId. Reconnects with backoff and
  * re-attaches every active session so terminals survive network blips. */
 export class DeckSocket {
   private ws: WebSocket | null = null;
   private handlers = new Set<Handler>();
+  private statusListeners = new Set<StatusListener>();
   private attachedIds = new Set<string>();
   private retry = 0;
   private closedByUser = false;
   private reconnectTimer: number | null = null;
 
+  onStatus(fn: StatusListener) {
+    this.statusListeners.add(fn);
+    return () => {
+      this.statusListeners.delete(fn);
+    };
+  }
+  private setStatus(s: 'connecting' | 'online' | 'offline') {
+    for (const fn of this.statusListeners) fn(s);
+  }
+
   connect() {
     this.closedByUser = false;
+    this.setStatus('connecting');
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws`);
     this.ws = ws;
     ws.onopen = () => {
       this.retry = 0;
+      this.setStatus('online');
       for (const id of this.attachedIds) {
         ws.send(JSON.stringify({ type: 'attach', sessionId: id } satisfies ClientMessage));
       }
@@ -36,6 +50,7 @@ export class DeckSocket {
     };
     ws.onclose = () => {
       if (this.closedByUser) return;
+      this.setStatus('offline');
       const delay = Math.min(8000, 600 * 2 ** this.retry++);
       this.reconnectTimer = window.setTimeout(() => this.connect(), delay);
     };

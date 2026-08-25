@@ -52,6 +52,18 @@ try {
   log('shell session created, xterm rendered', true);
   await page.screenshot({ path: `${SHOTS}/03-term.png` });
 
+  // 3b. USER PATH: type nothing — the shell prompt must appear on its own.
+  await page.waitForFunction(
+    () => [...document.querySelectorAll('.xterm-rows > div')].some((r) => r.textContent.includes('#')),
+    { timeout: 6000 },
+  );
+  log('prompt appears without any typing (replay/live stream works)', true);
+  await page.screenshot({ path: `${SHOTS}/03b-prompt.png` });
+
+  // 3c. Status lamp shows online
+  const lampOnline = await page.$('header .bg-emerald-400');
+  log('ws status lamp is green (online)', Boolean(lampOnline));
+
   // 4. Type a command; expect echo in terminal
   await page.focus('.xterm-helper-textarea');
   await page.keyboard.type('echo TERMUX-OK-$((13*2))');

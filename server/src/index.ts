@@ -55,7 +55,13 @@ app.get('*', (c) => {
   if (!file.startsWith(dist)) return c.text('forbidden', 403);
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');
   if (!fs.existsSync(file)) return c.text('not found', 404);
-  return c.body(fs.readFileSync(file), 200, { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream' });
+  // index.html must never be cached: it references hashed assets that get
+  // deleted on the next build, and a stale copy bricks the page.
+  const headers: Record<string, string> = { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream' };
+  if (file.endsWith('.html') || file.endsWith('index.html')) {
+    headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+  }
+  return c.body(fs.readFileSync(file), 200, { headers });
 });
 
 // --- WebSocket ----------------------------------------------------------------
