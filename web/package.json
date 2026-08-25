@@ -1,5 +1,5 @@
 {
-  "name": "@agentdeck/web",
+  "name": "@termux-webui/web",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
-    "@agentdeck/shared": "workspace:*",
+    "@termux-webui/shared": "workspace:*",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
     "react": "^19.0.0",

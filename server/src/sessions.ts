@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { IPty, spawn } from 'node-pty';
-import type { CliId, SessionInfo } from '@agentdeck/shared';
+import type { CliId, SessionInfo } from '@termux-webui/shared';
 import { commandFor } from './clis.js';
 
 export interface Session extends SessionInfo {

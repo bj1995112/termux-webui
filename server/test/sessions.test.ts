@@ -44,10 +44,10 @@ describe('SessionManager', () => {
     const info = makeShell();
     let got = '';
     const off = manager.onOutput(info.id, (d) => (got += d));
-    manager.write(info.id, 'echo agentdeck-test-1234\r');
+    manager.write(info.id, 'echo termux-webui-test-1234\r');
     await new Promise((r) => setTimeout(r, 800));
     off();
-    expect(got).toContain('agentdeck-test-1234');
+    expect(got).toContain('termux-webui-test-1234');
   });
 
   it('kills a session and reports exit', async () => {

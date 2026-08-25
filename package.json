@@ -1,5 +1,5 @@
 {
-  "name": "agentdeck-next",
+  "name": "termux-webui",
   "private": true,
   "version": "0.1.0",
   "description": "Universal mobile-first control console for coding agent CLIs",

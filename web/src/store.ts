@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CliInfo, SessionInfo } from '@agentdeck/shared';
+import type { CliInfo, SessionInfo } from '@termux-webui/shared';
 import { deckSocket } from './lib/ws.js';
 
 interface DeckState {

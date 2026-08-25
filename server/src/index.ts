@@ -4,11 +4,11 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CliId, ClientMessage, type CreateSessionBody, type ServerMessage } from '@agentdeck/shared';
+import { CliId, ClientMessage, type CreateSessionBody, type ServerMessage } from '@termux-webui/shared';
 import { listClis } from './clis.js';
 import { SessionManager } from './sessions.js';
 
-const PORT = Number(process.env.PORT || 4173);
+const PORT = Number(process.env.PORT || 4150);
 const HOST = process.env.HOST || '127.0.0.1';
 
 export const manager = new SessionManager();
@@ -148,7 +148,7 @@ wss.on('connection', (socket) => {
 // --- Boot ----------------------------------------------------------------------
 
 const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
-  console.log(`[agentdeck] http://${HOST}:${info.port}`);
+  console.log(`[termux-webui] http://${HOST}:${info.port}`);
 });
 server.on('upgrade', (req, socket, head) => {
   if (new URL(req.url ?? '/', 'http://localhost').pathname !== '/ws') return socket.destroy();

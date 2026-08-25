@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import type { CliId, CliInfo } from '@agentdeck/shared';
+import type { CliId, CliInfo } from '@termux-webui/shared';
 
 const REGISTRY: Array<{ id: CliId; label: string; bin: string }> = [
   { id: 'shell', label: '终端', bin: '' },

@@ -97,7 +97,7 @@ export default function QuickKeyboard({
   }, []);
 
   const copySelection = useCallback(() => {
-    window.dispatchEvent(new CustomEvent('agentdeck-copy-selection'));
+    window.dispatchEvent(new CustomEvent('termux-webui-copy-selection'));
   }, []);
 
   const pasteClipboard = useCallback(async () => {
@@ -197,7 +197,7 @@ export default function QuickKeyboard({
                 <ActionButton label="复制选中" onClick={copySelection} />
                 <ActionButton label="粘贴" onClick={() => void pasteClipboard()} />
                 {renderKey(key('清屏', '\x0c'))}
-                <ActionButton label="全选" onClick={() => window.dispatchEvent(new CustomEvent('agentdeck-select-all'))} />
+                <ActionButton label="全选" onClick={() => window.dispatchEvent(new CustomEvent('termux-webui-select-all'))} />
                 {renderKey(key('Home', '\x1b[H'))}
                 {renderKey(key('End', '\x1b[F'))}
                 <ActionButton label="ABC键盘" onClick={() => document.querySelector<HTMLTextAreaElement>('.xterm-helper-textarea')?.focus()} />

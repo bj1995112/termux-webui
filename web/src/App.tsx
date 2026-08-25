@@ -35,7 +35,7 @@ export default function App() {
     <div className="flex h-full flex-col">
       {/* Top bar */}
       <header className="flex items-center gap-2 border-b border-border bg-panel px-3 py-2">
-        <span className="text-sm font-bold tracking-wide text-accent">▚ AgentDeck</span>
+        <span className="text-sm font-bold tracking-wide text-accent">▚ Termux WebUI</span>
         {active && <span className="rounded bg-panel2 px-1.5 py-0.5 text-[10px] text-muted">{active.kind}</span>}
         <button
           onClick={() => setShowNew(true)}

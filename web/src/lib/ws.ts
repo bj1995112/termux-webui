@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage } from '@agentdeck/shared';
+import type { ClientMessage, ServerMessage } from '@termux-webui/shared';
 
 type Handler = (msg: ServerMessage) => void;
 

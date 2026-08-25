@@ -1,5 +1,5 @@
 {
-  "name": "@agentdeck/server",
+  "name": "@termux-webui/server",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agentdeck/shared": "workspace:*",
+    "@termux-webui/shared": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "hono": "^4.6.0",
     "node-pty": "1.1.0",

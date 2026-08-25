@@ -1,4 +1,4 @@
-# AgentDeck Next
+# Termux WebUI
 
 手机优先的通用 AI 编程 Agent 控制台:不管项目在哪、用哪个 CLI,打开同一个网址就能开会话、看输出、批权限。
 
@@ -18,10 +18,10 @@ pnpm monorepo
 ```bash
 pnpm install
 pnpm build          # 构建前端
-pnpm start          # 默认 127.0.0.1:4173
+pnpm start          # 默认 127.0.0.1:4150
 
 # 局域网访问(手机)
-HOST=0.0.0.0 pnpm start
+HOST=0.0.0.0 pnpm start   # 手机访问 :4150
 ```
 
 ## API
