@@ -35,26 +35,45 @@ export default function App() {
     if (!diag) return;
     const el = document.getElementById('diag');
     if (!el) return;
-    let raf = 0;
     const tick = () => {
       const host = document.querySelector('.term-host');
       const scr = (host?.querySelector('.xterm-screen') as HTMLElement | null) ?? null;
       const vp = host?.querySelector('.xterm-viewport') as HTMLElement | null;
+      const row = [...(host?.querySelectorAll('.xterm-rows > div') ?? [])].find(
+        (d) => d.textContent && d.textContent.trim().length > 4,
+      ) as HTMLElement | undefined;
+      // measure real font advances with the terminal's own font stack
+      let cjkW = 0;
+      let cellW = 0;
+      if (scr) {
+        const probe = document.createElement('span');
+        probe.style.cssText =
+          'position:absolute;visibility:hidden;white-space:pre;font-size:13px;font-family:' +
+          getComputedStyle(scr).fontFamily;
+        probe.textContent = '中'.repeat(30);
+        document.body.appendChild(probe);
+        cjkW = probe.getBoundingClientRect().width / 30;
+        probe.textContent = 'M'.repeat(30);
+        cellW = probe.getBoundingClientRect().width / 30;
+        probe.remove();
+      }
       const info = [
         `dpr=${devicePixelRatio}`,
-        `inner=${innerWidth}x${innerHeight}`,
-        `zoom=${Math.round((visualViewport?.scale ?? 1) * 100)}%`,
         `hostW=${host?.clientWidth ?? '?'}`,
         `screenW=${scr ? Math.round(scr.getBoundingClientRect().width * 10) / 10 : '?'}`,
-        `styleW=${scr?.style.width || '?'}`,
         `sbGap=${vp ? vp.offsetWidth - vp.clientWidth : '?'}`,
-        `overflow=${host && scr ? Math.round((scr.getBoundingClientRect().width - host.clientWidth) * 10) / 10 : '?'}`,
+        `rowClient=${row?.clientWidth ?? '?'}`,
+        `rowScroll=${row?.scrollWidth ?? '?'}`,
+        `rowOver=${row ? row.scrollWidth - row.clientWidth : '?'}`,
+        `cellW=${Math.round(cellW * 100) / 100}`,
+        `cjkW=${Math.round(cjkW * 100) / 100}`,
+        `drift/cjk=${cellW ? Math.round((cjkW - cellW * 2) * 100) / 100 : '?'}`,
       ];
       el.textContent = info.join('  ');
-      raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const iv = window.setInterval(tick, 500);
+    tick();
+    return () => clearInterval(iv);
   }, [diag]);
 
   return (
