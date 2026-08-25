@@ -143,6 +143,9 @@ export default function TermView({ sessionId, active }: Props) {
     };
     fitFns.set(sessionId, fitNow);
     fitNow();
+    // The bundled web font changes the real cell width; once it's in,
+    // re-measure so the column count matches what will actually be painted.
+    void document.fonts.ready.then(() => fitNow());
 
     // ---- follow output -----------------------------------------------------
     const followRef = { current: followOutput };

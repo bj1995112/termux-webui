@@ -43,13 +43,14 @@ export default function App() {
         (d) => d.textContent && d.textContent.trim().length > 4,
       ) as HTMLElement | undefined;
       // measure real font advances with the terminal's own font stack
+      // (NOTE: .xterm-screen carries no font — the rows are the source of truth)
       let cjkW = 0;
       let cellW = 0;
-      if (scr) {
+      if (row) {
         const probe = document.createElement('span');
         probe.style.cssText =
           'position:absolute;visibility:hidden;white-space:pre;font-size:13px;font-family:' +
-          getComputedStyle(scr).fontFamily;
+          getComputedStyle(row).fontFamily;
         probe.textContent = '中'.repeat(30);
         document.body.appendChild(probe);
         cjkW = probe.getBoundingClientRect().width / 30;
