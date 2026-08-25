@@ -15,10 +15,6 @@ const PAGES = [
   { id: 'symbols', label: '符号' },
 ] as const;
 
-const CORE_KEYS = [
-  key('Esc', '\x1b'), key('Tab', '\t'), key('Ctrl', null), key('Alt', null), key('Shift', null),
-  key('⌫', '\x7f'), key('Enter', '\r'),
-];
 const NAV_KEYS = [
   key('Home', '\x1b[H'), key('↑', '\x1b[A'), key('End', '\x1b[F'),
   key('←', '\x1b[D'), key('↓', '\x1b[B'), key('→', '\x1b[C'),
@@ -26,10 +22,26 @@ const NAV_KEYS = [
 const COMBO_KEYS = [
   key('Ctrl+C', '\x03'), key('Ctrl+D', '\x04'), key('Ctrl+L', '\x0c'), key('Ctrl+Z', '\x1a'),
 ];
+
+// ---- Page 1: Termux layout -------------------------------------------------
+// Top row: high-frequency combos. Below: Termux's native extra-keys rows.
+const TOP_KEYS = [
+  key('Ctrl+C', '\x03'), key('Ctrl+D', '\x04'), key('Ctrl+J', '\x0a'),
+  key('清屏', '\x0c'), key('Enter', '\r'), key('⌫', '\x7f'),
+];
+const TERMUX_ROW1 = [
+  key('Esc', '\x1b'), key('/', '/'), key('-', '-'), ...NAV_KEYS.slice(0, 3),
+  key('PgUp', '\x1b[5~'),
+];
+const TERMUX_ROW2 = [
+  key('Tab', '\t'), key('Ctrl', null), key('Alt', null),
+  NAV_KEYS[3], NAV_KEYS[4], NAV_KEYS[5],
+  key('PgDn', '\x1b[6~'),
+];
 const EDIT_KEYS = [
   key('Ctrl+A', '\x01'), key('Ctrl+E', '\x05'), key('Ctrl+U', '\x15'), key('Ctrl+K', '\x0b'),
   key('Ctrl+W', '\x17'), key('Ctrl+R', '\x12'), key('Ctrl+B', '\x02'), key('Ctrl+F', '\x06'),
-  ...NAV_KEYS, key('Del', '\x1b[3~'), key('⇧Tab', '\x1b[Z'),
+  ...NAV_KEYS.slice(0, 3), key('Del', '\x1b[3~'), key('⇧Tab', '\x1b[Z'),
 ];
 const SYMBOL_KEYS = '|/\\-_~`"\':;&*$><=+.,#()[]{}'.split('').map((c) => key(c, c));
 
@@ -113,7 +125,7 @@ export default function QuickKeyboard({
     (k: KeyDef) => (
       <button
         key={k.label + (k.seq ?? '')}
-        className={`flex h-full min-h-[44px] items-center justify-center rounded-md border border-border bg-panel2 px-0.5 text-[13px] active:bg-accent/30 ${
+        className={`flex h-full min-h-0 items-center justify-center rounded-md border border-border bg-panel2 px-0.5 text-[13px] active:bg-accent/30 ${
           k.seq === null ? 'text-muted' : ''
         }`}
         onPointerDown={(e) => {
@@ -189,18 +201,11 @@ export default function QuickKeyboard({
             style={{ scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
           >
             {p.id === 'core' ? (
+              // Termux layout: top combo row + the two native extra-keys rows
               <div className="flex h-full flex-col gap-1">
-                <div className="grid flex-1 grid-cols-7 gap-1">{CORE_KEYS.map(renderKey)}</div>
-                {/* D-pad cross: ↑ centered on top, ← ↓ → below */}
-                <div className="grid flex-1 grid-cols-3 grid-rows-2 gap-1">
-                  <div />
-                  {NAV_KEYS[1] && renderKey(NAV_KEYS[1])}
-                  <div />
-                  {renderKey(NAV_KEYS[3])}
-                  {renderKey(NAV_KEYS[4])}
-                  {renderKey(NAV_KEYS[5])}
-                </div>
-                <div className="grid flex-1 grid-cols-4 gap-1">{COMBO_KEYS.map(renderKey)}</div>
+                <div className="grid flex-1 grid-cols-6 gap-1">{TOP_KEYS.map(renderKey)}</div>
+                <div className="grid flex-1 grid-cols-7 gap-1">{TERMUX_ROW1.map(renderKey)}</div>
+                <div className="grid flex-1 grid-cols-7 gap-1">{TERMUX_ROW2.map(renderKey)}</div>
               </div>
             ) : p.id === 'edit' ? (
               <div className="grid h-full grid-cols-4 grid-rows-3 gap-1">{EDIT_KEYS.map(renderKey)}</div>
