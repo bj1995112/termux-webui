@@ -147,12 +147,15 @@ export default function TermView({ sessionId, active }: Props) {
     let fixedCell: Cell | null = null;
     let dragFrame: number | null = null;
     let dragPointer: { x: number; y: number } | null = null;
-    // Momentum scrolling: recent touch samples feed a friction animation
-    // after the finger lifts, because xterm's own touch scroll is strictly
-    // 1:1 with no inertia.
-    let samples: { t: number; y: number }[] = [];
-    let inertiaFrame: number | null = null;
     const anchorCellRef: { current: Cell | null } = { current: null };
+
+    // Native scrolling is active whenever the child app isn't reporting mouse
+    // events (htop/vim translate touches into clicks — those must reach xterm).
+    // areMouseEventsActive is an internal xterm field but stable across 5.x;
+    // if it ever disappears we fall back to native scrolling (shell default).
+    const nativeScroll = () =>
+      !(term as unknown as { coreMouseService?: { areMouseEventsActive?: boolean } })
+        .coreMouseService?.areMouseEventsActive;
 
     const screen = () => host.querySelector('.xterm-screen');
     const cellAt = (x: number, y: number): Cell | null => {
@@ -207,32 +210,6 @@ export default function TermView({ sessionId, active }: Props) {
       dragFrame = null;
     };
 
-    const stopInertia = () => {
-      if (inertiaFrame !== null) cancelAnimationFrame(inertiaFrame);
-      inertiaFrame = null;
-    };
-    const startInertia = () => {
-      if (samples.length < 2) return;
-      const first = samples[0];
-      const last = samples[samples.length - 1];
-      const dt = last.t - first.t;
-      if (dt <= 0) return;
-      let v = (first.y - last.y) / dt; // px/ms, finger up = scroll up
-      if (Math.abs(v) < 0.2) return;
-      v = Math.max(-2.5, Math.min(2.5, v));
-      const vp = host.querySelector('.xterm-viewport');
-      if (!vp) return;
-      let prev = performance.now();
-      const step = (now: number) => {
-        const d = now - prev;
-        prev = now;
-        vp.scrollTop += v * d;
-        v *= Math.pow(0.94, d / 16); // friction per frame
-        inertiaFrame = Math.abs(v) > 0.03 ? requestAnimationFrame(step) : null;
-      };
-      inertiaFrame = requestAnimationFrame(step);
-    };
-
     const onHostTouchStart = (event: TouchEvent) => {
       const target = event.target as HTMLElement;
       const handleEl = target?.closest?.('.sel-handle') as HTMLElement | null;
@@ -244,7 +221,6 @@ export default function TermView({ sessionId, active }: Props) {
         const t = event.touches[0];
         if (!t) return;
         stopDragScroll();
-        stopInertia();
         dragWhich = handleEl.classList.contains('start') ? 'a' : 'b';
         dragPointer = { x: t.clientX, y: t.clientY };
         const ends = currentEnds();
@@ -256,12 +232,18 @@ export default function TermView({ sessionId, active }: Props) {
         return;
       }
       if (!screen() || event.touches.length > 1) return;
+      if (nativeScroll()) {
+        // Keep xterm's touch handlers out of the way: its touchstart calls
+        // preventDefault, which would cancel the browser's native scroll
+        // gesture before it even starts.
+        event.stopPropagation();
+      } else {
+        return; // mouse mode: touches belong to xterm's click translation
+      }
       const t = event.touches[0];
       pressPoint = { x: t.clientX, y: t.clientY };
       primaryId = t.identifier;
       gesture = 'pressed';
-      samples = [{ t: performance.now(), y: t.clientY }];
-      stopInertia(); // a new touch always kills a running fling
       if (pressTimer) clearTimeout(pressTimer);
       pressTimer = window.setTimeout(() => {
         if (gesture !== 'pressed' || !pressPoint) return;
@@ -325,11 +307,11 @@ export default function TermView({ sessionId, active }: Props) {
         }
         return;
       }
-      // Scroll path (pressed or already idle): sample velocity for the fling.
+      // Scroll path (pressed or already idle): keep xterm's 1:1 touch
+      // scrolling out of the way — the compositor owns the gesture now.
+      if (nativeScroll()) event.stopPropagation();
       const t = event.touches[0];
       if (!t) return;
-      samples.push({ t: performance.now(), y: t.clientY });
-      while (samples.length > 2 && performance.now() - samples[0].t > 120) samples.shift();
       if (gesture === 'pressed' && pressPoint) {
         const dx = t.clientX - pressPoint.x;
         const dy = t.clientY - pressPoint.y;
@@ -339,7 +321,7 @@ export default function TermView({ sessionId, active }: Props) {
         if (Math.hypot(dx, dy) > SCROLL_CANCEL_PX || verticalIntent) {
           if (pressTimer) clearTimeout(pressTimer);
           pressTimer = null;
-          gesture = 'idle'; // it's a scroll, let xterm have it
+          gesture = 'idle'; // it's a scroll, let the browser have it
         }
       }
     };
@@ -379,7 +361,9 @@ export default function TermView({ sessionId, active }: Props) {
       } else {
         gesture = 'idle';
         primaryId = null;
-        startInertia(); // carry the finger's release velocity
+        // Stop xterm's touchend handler (it calls preventDefault, which would
+        // suppress the synthesized tap that focuses the terminal).
+        if (nativeScroll()) event.stopPropagation();
       }
     };
 
@@ -404,7 +388,6 @@ export default function TermView({ sessionId, active }: Props) {
       ro.disconnect();
       if (pressTimer) clearTimeout(pressTimer);
       stopDragScroll();
-      stopInertia();
       host.removeEventListener('touchstart', onHostTouchStart, true);
       host.removeEventListener('touchmove', onHostTouchMove, true);
       host.removeEventListener('touchend', onHostTouchEnd, true);
@@ -528,7 +511,7 @@ export default function TermView({ sessionId, active }: Props) {
   // full area, visibility decides who shows. In-flow stacking would push the
   // 2nd+ terminals below the clip and look "blank".
   return (
-    <div className="absolute inset-0 h-full w-full" ref={hostRef}>
+    <div className="term-host absolute inset-0 h-full w-full" ref={hostRef}>
       {handles && posA && (
         <div className="sel-handle start" style={{ left: posA.left, top: posA.top }} data-which="a" />
       )}

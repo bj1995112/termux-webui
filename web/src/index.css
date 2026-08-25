@@ -19,6 +19,20 @@ html, body, #root {
   font-family: system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
 }
 
+/* ---- native touch scrolling -------------------------------------------
+   xterm renders rows in .xterm-screen but scrolls via its sibling
+   .xterm-viewport (they are NOT ancestor/descendant). Touches landing on
+   the screen can therefore never natively scroll the viewport — so we drop
+   pointer events on the screen and let them fall through to the viewport,
+   which the compositor then scrolls with real momentum physics. */
+.term-host .xterm-screen {
+  pointer-events: none;
+}
+.term-host .xterm-viewport {
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
 /* ---- selection handles + action bar ---- */
 .sel-handle {
   position: absolute;

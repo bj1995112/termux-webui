@@ -63,7 +63,7 @@ app.get('*', (c) => {
   if (file.endsWith('.html') || file.endsWith('index.html')) {
     headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
   }
-  return c.body(fs.readFileSync(file), 200, { headers });
+  return c.body(fs.readFileSync(file), 200, headers);
 });
 
 // --- WebSocket ----------------------------------------------------------------
