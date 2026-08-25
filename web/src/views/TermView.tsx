@@ -88,6 +88,31 @@ export default function TermView({ sessionId, active }: Props) {
       try {
         fit.fit();
         if (term.cols >= 2 && term.rows >= 2) {
+          // FitAddon measures the cell width with one rounding and the DOM
+          // renderer paints with another; on some devicePixelRatio × font
+          // size combos the painted grid ends up WIDER than the container
+          // and the last column gets clipped. Self-heal: shrink by a column
+          // while overflowing, then try to reclaim any full spare column.
+          const hostEl = host;
+          const scr = hostEl.querySelector('.xterm-screen') as HTMLElement | null;
+          if (scr) {
+            let guard = 0;
+            while (scr.getBoundingClientRect().width > hostEl.clientWidth + 0.5 && term.cols > 2 && guard++ < 4) {
+              term.resize(term.cols - 1, term.rows);
+            }
+            guard = 0;
+            while (
+              scr.getBoundingClientRect().width + hostEl.clientWidth / term.cols <= hostEl.clientWidth &&
+              guard++ < 4
+            ) {
+              const before = term.cols;
+              term.resize(term.cols + 1, term.rows);
+              if (scr.getBoundingClientRect().width > hostEl.clientWidth + 0.5) {
+                term.resize(before, term.rows); // overflowed — step back
+                break;
+              }
+            }
+          }
           deckSocket.send({ type: 'resize', sessionId, cols: term.cols, rows: term.rows });
         }
       } catch {
