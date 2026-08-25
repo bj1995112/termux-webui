@@ -66,6 +66,7 @@ export default function TermView({ sessionId, active }: Props) {
   const [, setScrollTick] = useState(0);
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
+  const rightReservePct = useDeck((s) => s.rightReservePct);
 
   // Create once per session.
   useEffect(() => {
@@ -88,6 +89,11 @@ export default function TermView({ sessionId, active }: Props) {
       try {
         fit.fit();
         if (term.cols >= 2 && term.rows >= 2) {
+          // User-controlled right reserve: shave a percentage of the columns
+          // so long lines end early instead of clipping glyphs at the edge.
+          const pct = useDeck.getState().rightReservePct / 100;
+          const target = pct > 0 ? Math.max(2, Math.floor(term.cols * (1 - pct))) : term.cols;
+          if (target !== term.cols) term.resize(target, term.rows);
           deckSocket.send({ type: 'resize', sessionId, cols: term.cols, rows: term.rows });
         }
       } catch {
@@ -465,6 +471,12 @@ export default function TermView({ sessionId, active }: Props) {
     host.style.visibility = active ? 'visible' : 'hidden';
     if (active) requestAnimationFrame(() => fitFns.get(sessionId)?.());
   }, [active, sessionId]);
+
+  // Live-apply the right-reserve setting: refit every terminal immediately,
+  // no reload needed.
+  useEffect(() => {
+    fitFns.get(sessionId)?.();
+  }, [rightReservePct, sessionId]);
 
   const handleCoords = (which: 'a' | 'b') => {
     if (!handles) return null;

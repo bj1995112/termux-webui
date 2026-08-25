@@ -5,6 +5,7 @@ import TermView from './views/TermView';
 import QuickKeyboard from './components/QuickKeyboard';
 import SessionTabs from './components/SessionTabs';
 import NewSessionDialog from './components/NewSessionDialog';
+import Drawer from './components/Drawer';
 
 export default function App() {
   const sessions = useDeck((s) => s.sessions);
@@ -15,6 +16,7 @@ export default function App() {
   const keyboardVisible = useDeck((s) => s.keyboardVisible);
   const toggleKeyboard = useDeck((s) => s.toggleKeyboard);
   const [showNew, setShowNew] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
 
   useEffect(() => deckSocket.onStatus(setWsStatus), []);
@@ -32,6 +34,13 @@ export default function App() {
     <div className="flex h-full flex-col">
       {/* Top bar */}
       <header className="flex items-center gap-2 border-b border-border bg-panel px-3 py-2">
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="rounded-lg px-1.5 py-1 text-base leading-none text-muted active:text-text"
+          title="菜单"
+        >
+          ☰
+        </button>
         <span
           title={wsStatus === 'online' ? '已连接' : wsStatus === 'connecting' ? '连接中…' : '连接断开,重试中'}
           className={`h-2 w-2 flex-shrink-0 rounded-full ${
@@ -75,6 +84,7 @@ export default function App() {
       <SessionTabs />
 
       {showNew && <NewSessionDialog onClose={() => setShowNew(false)} />}
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 }

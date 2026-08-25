@@ -8,6 +8,9 @@ interface DeckState {
   keyboardVisible: boolean;
   suppressKeyboard: boolean;
   followOutput: boolean;
+  /** percentage of the terminal width kept blank on the right (0-20) */
+  rightReservePct: number;
+  setRightReservePct: (pct: number) => void;
   loadClis: () => Promise<void>;
   loadSessions: () => Promise<void>;
   createSession: (kind: SessionInfo['kind'], cwd?: string) => Promise<SessionInfo>;
@@ -24,6 +27,12 @@ const boolPref = (key: string, fallback: boolean): boolean => {
   return saved === null ? fallback : saved === '1';
 };
 
+const numPref = (key: string, fallback: number): number => {
+  const saved = localStorage.getItem(key);
+  const n = saved === null ? NaN : Number(saved);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 export const useDeck = create<DeckState>((set, get) => ({
   clis: [],
   sessions: [],
@@ -31,6 +40,7 @@ export const useDeck = create<DeckState>((set, get) => ({
   keyboardVisible: true,
   suppressKeyboard: boolPref('twui.suppressKeyboard', false),
   followOutput: boolPref('twui.followOutput', true),
+  rightReservePct: numPref('twui.rightReservePct', 5),
 
   loadClis: async () => {
     const res = await fetch('/api/clis');
@@ -93,5 +103,11 @@ export const useDeck = create<DeckState>((set, get) => ({
     const next = value ?? !get().followOutput;
     localStorage.setItem('twui.followOutput', next ? '1' : '0');
     set({ followOutput: next });
+  },
+
+  setRightReservePct: (pct) => {
+    const clamped = Math.max(0, Math.min(20, Math.round(pct)));
+    localStorage.setItem('twui.rightReservePct', String(clamped));
+    set({ rightReservePct: clamped });
   },
 }));
