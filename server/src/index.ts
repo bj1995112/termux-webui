@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CliId, ClientMessage, type CreateSessionBody, type ServerMessage } from '@termux-webui/shared';
 import { listClis } from './clis.js';
+import { listProjects } from './projects.js';
 import { SessionManager } from './sessions.js';
 
 const PORT = Number(process.env.PORT || 4150);
@@ -19,6 +20,7 @@ const app = new Hono();
 
 app.get('/api/health', (c) => c.json({ ok: true }));
 app.get('/api/clis', (c) => c.json(listClis()));
+app.get('/api/projects', (c) => c.json(listProjects()));
 app.get('/api/sessions', (c) => c.json(manager.list()));
 
 app.post('/api/sessions', async (c) => {

@@ -46,3 +46,8 @@ export interface CreateSessionBody {
   kind: CliId;
   cwd?: string;
 }
+
+export interface ProjectInfo {
+  name: string;
+  path: string;
+}

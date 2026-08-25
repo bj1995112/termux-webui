@@ -62,6 +62,10 @@ export default function TermView({ sessionId, active }: Props) {
 
     const ro = new ResizeObserver(() => requestAnimationFrame(fitNow));
     ro.observe(host);
+    // Attach only AFTER our message handler is registered — otherwise the
+    // server's prompt/replay can arrive before anyone is listening (this is
+    // why the 2nd+ session used to open blank).
+    deckSocket.attach(sessionId);
     return () => {
       off();
       ro.disconnect();
@@ -79,5 +83,8 @@ export default function TermView({ sessionId, active }: Props) {
     if (active) requestAnimationFrame(() => fitFns.get(sessionId)?.());
   }, [active, sessionId]);
 
-  return <div className="h-full w-full min-h-0" ref={hostRef} />;
+  // Absolutely stacked inside <main>(relative): every session occupies the
+  // full area, visibility decides who shows. In-flow stacking would push the
+  // 2nd+ terminals below the clip and look "blank".
+  return <div className="absolute inset-0 h-full w-full" ref={hostRef} />;
 }

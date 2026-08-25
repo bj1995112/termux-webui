@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import type { CliInfo, SessionInfo } from '@termux-webui/shared';
-import { deckSocket } from './lib/ws.js';
 
 interface DeckState {
   clis: CliInfo[];
@@ -46,7 +45,7 @@ export const useDeck = create<DeckState>((set, get) => ({
     if (!res.ok) throw new Error('create failed');
     const info: SessionInfo = await res.json();
     set((s) => ({ sessions: [...s.sessions, info], activeId: info.id }));
-    deckSocket.attach(info.id);
+    // attach happens in TermView once its message handler is registered.
     return info;
   },
 
@@ -56,7 +55,8 @@ export const useDeck = create<DeckState>((set, get) => ({
   },
 
   setActive: (id) => {
-    if (id) deckSocket.attach(id);
+    // No attach here — TermView attaches itself after registering its
+    // message handler, so the prompt can never arrive un-received.
     set({ activeId: id });
   },
 

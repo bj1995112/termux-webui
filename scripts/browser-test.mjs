@@ -75,12 +75,21 @@ try {
   log('typed command echoed', termText1.includes('TERMUX-OK-26'));
   await page.screenshot({ path: `${SHOTS}/04-after-echo.png` });
 
-  // 5. Second session → two canvases
+  // 5. Second session → two terminals; THE USER'S BUG: 2nd+ sessions used to
+  // open blank because the prompt was pushed before the view was listening.
   await page.click('header >> text=⊕ 新建');
   await page.waitForSelector('text=新建会话');
   await page.click('section >> text=终端');
   await page.waitForFunction(() => document.querySelectorAll('.xterm-rows').length === 2, { timeout: 5000 });
-  log('second tab created (2 terminals)', true);
+  await page.waitForFunction(
+    () => {
+      const rows = [...document.querySelectorAll('.xterm-rows')];
+      const second = rows[1];
+      return second && second.textContent.includes('#');
+    },
+    { timeout: 6000 },
+  );
+  log('second session shows prompt WITHOUT typing (bug fixed)', true);
   await page.screenshot({ path: `${SHOTS}/05-two-tabs.png` });
 
   // 6. Switch back to first tab; scrollback intact

@@ -26,12 +26,6 @@ export default function App() {
     return () => deckSocket.close();
   }, [loadClis, loadSessions]);
 
-  // Auto-attach every session so background output keeps flowing into the
-  // hidden terminals (scrollback stays complete).
-  useEffect(() => {
-    for (const s of sessions) deckSocket.attach(s.id);
-  }, [sessions]);
-
   const active = sessions.find((s) => s.id === activeId) ?? null;
 
   return (
