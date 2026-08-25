@@ -179,16 +179,28 @@ export default function QuickKeyboard({
       <div
         ref={scrollRef}
         className="mk-pages flex overflow-x-auto"
-        style={{ height: '156px', touchAction: 'pan-x' }}
+        style={{ height: '156px', touchAction: 'pan-x', scrollSnapType: 'x mandatory' }}
         onScroll={handleScroll}
       >
         {displayPages.map((p, di) => (
-          <div key={`${p.id}-${di}`} className="h-full w-full flex-shrink-0 px-1.5 py-1">
+          <div
+            key={`${p.id}-${di}`}
+            className="h-full w-full flex-shrink-0 px-1.5 py-1"
+            style={{ scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
+          >
             {p.id === 'core' ? (
               <div className="flex h-full flex-col gap-1">
                 <div className="grid flex-1 grid-cols-7 gap-1">{CORE_KEYS.map(renderKey)}</div>
-                <div className="grid flex-1 grid-cols-6 gap-1">{NAV_KEYS.map((k) => renderKey(k))}</div>
-                <div className="grid flex-1 grid-cols-4 gap-1">{COMBO_KEYS.map((k) => renderKey(k))}</div>
+                {/* D-pad cross: ↑ centered on top, ← ↓ → below */}
+                <div className="grid flex-1 grid-cols-3 grid-rows-2 gap-1">
+                  <div />
+                  {NAV_KEYS[1] && renderKey(NAV_KEYS[1])}
+                  <div />
+                  {renderKey(NAV_KEYS[3])}
+                  {renderKey(NAV_KEYS[4])}
+                  {renderKey(NAV_KEYS[5])}
+                </div>
+                <div className="grid flex-1 grid-cols-4 gap-1">{COMBO_KEYS.map(renderKey)}</div>
               </div>
             ) : p.id === 'edit' ? (
               <div className="grid h-full grid-cols-4 grid-rows-3 gap-1">{EDIT_KEYS.map(renderKey)}</div>
