@@ -60,6 +60,10 @@ export default function TermView({ sessionId, active }: Props) {
   const [handles, setHandles] = useState<{ a: Cell; b: Cell } | null>(null);
   const [showBar, setShowBar] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Bumped on every terminal scroll: handle positions are derived from the
+  // live viewport, and without this re-render the handles stay pinned to the
+  // old screen position while the text scrolls away underneath them.
+  const [, setScrollTick] = useState(0);
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
 
@@ -387,7 +391,19 @@ export default function TermView({ sessionId, active }: Props) {
         setShowBar(false);
       }
     });
-    return () => w.dispose();
+    // Native viewport scroll listener: any scroll (touch, wheel, programmatic)
+    // must recompute handle screen positions, or they stay pinned to the old
+    // spot while the text moves underneath.
+    const vp = hostRef.current?.querySelector('.xterm-viewport');
+    let bump: (() => void) | null = null;
+    if (vp) {
+      bump = () => setScrollTick((t) => t + 1);
+      vp.addEventListener('scroll', bump);
+    }
+    return () => {
+      w.dispose();
+      if (bump && vp) vp.removeEventListener('scroll', bump);
+    };
   }, [sessionId, active]);
 
   // Suppress the system keyboard when requested.
