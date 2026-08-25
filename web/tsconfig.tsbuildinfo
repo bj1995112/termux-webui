@@ -1,1 +1,0 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/store.ts","./src/components/NewSessionDialog.tsx","./src/components/QuickKeyboard.tsx","./src/components/SessionTabs.tsx","./src/lib/ws.ts","./src/views/TermView.tsx","../shared/src/index.ts"],"version":"5.9.3"}
