@@ -16,7 +16,7 @@ export default function SessionTabs() {
   const killSession = useDeck((s) => s.killSession);
 
   return (
-    <div className="flex gap-1 overflow-x-auto border-t border-border bg-panel px-1.5 py-1.5 [scrollbar-width:none]">
+    <div id="tabs" className="flex gap-1 overflow-x-auto border-t border-border bg-panel px-1.5 py-1.5 [scrollbar-width:none]">
       {sessions.map((s, i) => (
         <button
           key={s.id}

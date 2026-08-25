@@ -124,6 +124,10 @@ function handleClient(socket: WebSocket, raw: string) {
         cols: session.pty.cols,
         rows: session.pty.rows,
       });
+      // Replay the rolling buffer so the new socket sees the prompt and all
+      // output produced before it attached (page reloads included).
+      const snapshot = manager.snapshot(msg.sessionId);
+      if (snapshot) send(socket, { type: 'output', sessionId: msg.sessionId, data: snapshot });
       break;
     }
     case 'detach':
@@ -142,7 +146,12 @@ const wss = new WebSocketServer({ noServer: true });
 wss.on('connection', (socket) => {
   sockets.add(socket);
   socket.on('message', (raw) => handleClient(socket, raw as Buffer));
-  socket.on('close', () => sockets.delete(socket));
+  socket.on('close', () => {
+    sockets.delete(socket);
+    // Drop the dead socket from every session so future attaches replay
+    // cleanly and closed sockets never receive output.
+    for (const set of attached.values()) set.delete(socket);
+  });
 });
 
 // --- Boot ----------------------------------------------------------------------

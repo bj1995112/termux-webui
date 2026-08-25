@@ -51,7 +51,7 @@ export default function App() {
       </header>
 
       {/* Content: all terminals mounted, only the active one visible */}
-      <main className="relative min-h-0 flex-1">
+      <main className="relative min-h-0 flex-1 overflow-hidden">
         {sessions.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-muted">
             <p className="text-sm">还没有会话</p>

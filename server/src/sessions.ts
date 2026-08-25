@@ -22,6 +22,10 @@ export class SessionManager {
   /** output listeners keyed by sessionId */
   private listeners = new Map<string, Set<(data: string) => void>>();
   private exitListeners = new Map<string, Set<(code: number) => void>>();
+  /** rolling output buffer per session, replayed on attach so late joiners
+   * (and page reloads) see the prompt and everything before them. */
+  private buffers = new Map<string, string>();
+  private static MAX_BUFFER = 128 * 1024;
 
   create(kind: CliId, cwd?: string): SessionInfo {
     const id = randomUUID();
@@ -43,8 +47,14 @@ export class SessionManager {
     });
     const session: Session = { id, kind, cwd: dir, createdAt: Date.now(), pty };
     this.sessions.set(id, session);
+    this.buffers.set(id, '');
 
     pty.onData((data) => {
+      const buf = (this.buffers.get(id) ?? '') + data;
+      this.buffers.set(
+        id,
+        buf.length > SessionManager.MAX_BUFFER ? buf.slice(-SessionManager.MAX_BUFFER) : buf,
+      );
       for (const fn of this.listeners.get(id) ?? []) fn(data);
     });
     pty.onExit(({ exitCode }) => {
@@ -111,9 +121,14 @@ export class SessionManager {
     return () => set!.delete(fn);
   }
 
+  snapshot(id: string): string {
+    return this.buffers.get(id) ?? '';
+  }
+
   private cleanup(id: string) {
     this.sessions.delete(id);
     this.listeners.delete(id);
     this.exitListeners.delete(id);
+    this.buffers.delete(id);
   }
 }

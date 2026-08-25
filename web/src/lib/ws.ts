@@ -42,8 +42,11 @@ export class DeckSocket {
     ws.onerror = () => ws.close();
   }
 
-  /** Idempotent attach — safe to call on every reconnect. */
+  /** Idempotent attach — repeated calls for the same session on the same
+   * connection are ignored, otherwise the server replays its buffer twice
+   * and the terminal shows duplicated content. */
   attach(sessionId: string) {
+    if (this.attachedIds.has(sessionId)) return;
     this.attachedIds.add(sessionId);
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'attach', sessionId } satisfies ClientMessage));
