@@ -71,11 +71,10 @@ export default function TermView({ sessionId, active }: Props) {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const FONT_STACK = '"JetBrains Mono", Menlo, Consolas, monospace';
     const term = new Terminal({
       theme: DARK,
       fontSize: 13,
-      fontFamily: FONT_STACK,
+      fontFamily: '"JetBrains Mono", Menlo, Consolas, monospace',
       scrollSensitivity: 3,
       fastScrollSensitivity: 8,
     });
@@ -83,58 +82,12 @@ export default function TermView({ sessionId, active }: Props) {
     term.loadAddon(fit);
     term.open(host);
     termRef.current = term;
-
-    // ---- CJK drift reserve --------------------------------------------------
-    // The grid assumes a CJK glyph is exactly 2 cells, but the system mono
-    // font has no CJK glyphs — they fall back to a font whose advance is
-    // wider. The DOM renderer lays text out naturally, so every hanzi drifts
-    // a fraction of a px and all-CJK lines end up clipped at the right edge.
-    // (size-adjust/@font-face can't fix this: Android Chrome fails to
-    // resolve local() system fonts.) Measure the drift and reserve enough
-    // columns for a worst-case all-CJK line; normal ASCII lines still fill
-    // the full width.
-    const measureCtx = document.createElement('canvas').getContext('2d');
-    let cjkDriftRatio = 0; // per-cell overhang of a hanzi, in cell-width units
-    if (measureCtx) {
-      measureCtx.font = `100px ${FONT_STACK}`;
-      const cell = measureCtx.measureText('M').width;
-      const cjk = measureCtx.measureText('中').width;
-      if (cell > 0) cjkDriftRatio = Math.max(0, (cjk - cell * 2) / cell);
-    }
-
     term.onData((data) => deckSocket.send({ type: 'input', sessionId, data }));
 
     const fitNow = () => {
       try {
         fit.fit();
         if (term.cols >= 2 && term.rows >= 2) {
-          // FitAddon measures the cell width with one rounding and the DOM
-          // renderer paints with another; on some devicePixelRatio × font
-          // size combos the painted grid ends up WIDER than the container
-          // and the last column gets clipped. Self-heal: shrink by a column
-          // while overflowing, then try to reclaim any full spare column.
-          // All width checks run against the CJK-safe effective width: room
-          // for a worst-case all-CJK line is reserved up front.
-          const hostEl = host;
-          const scr = hostEl.querySelector('.xterm-screen') as HTMLElement | null;
-          if (scr) {
-            const cellW = scr.getBoundingClientRect().width / term.cols;
-            const reserve = cjkDriftRatio > 0 ? Math.ceil((term.cols / 2) * cjkDriftRatio) : 0;
-            const maxW = Math.max(cellW * 4, hostEl.clientWidth - reserve * cellW);
-            let guard = 0;
-            while (scr.getBoundingClientRect().width > maxW + 0.5 && term.cols > 2 && guard++ < 6) {
-              term.resize(term.cols - 1, term.rows);
-            }
-            guard = 0;
-            while (scr.getBoundingClientRect().width + cellW <= maxW && guard++ < 6) {
-              const before = term.cols;
-              term.resize(term.cols + 1, term.rows);
-              if (scr.getBoundingClientRect().width > maxW + 0.5) {
-                term.resize(before, term.rows); // overflowed — step back
-                break;
-              }
-            }
-          }
           deckSocket.send({ type: 'resize', sessionId, cols: term.cols, rows: term.rows });
         }
       } catch {
@@ -143,9 +96,6 @@ export default function TermView({ sessionId, active }: Props) {
     };
     fitFns.set(sessionId, fitNow);
     fitNow();
-    // The bundled web font changes the real cell width; once it's in,
-    // re-measure so the column count matches what will actually be painted.
-    void document.fonts.ready.then(() => fitNow());
 
     // ---- follow output -----------------------------------------------------
     const followRef = { current: followOutput };

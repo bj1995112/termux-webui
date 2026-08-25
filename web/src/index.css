@@ -31,13 +31,6 @@ html, body, #root {
 .term-host .xterm-viewport {
   touch-action: pan-y;
   overscroll-behavior: contain;
-  /* The terminal scrolls by gesture — the scrollbar is pure noise. On some
-     Chrome variants it also OCCUPIES layout width, squeezing/clipping the
-     rightmost column ("the strip inside the scrollbar"). Remove it entirely. */
-  scrollbar-width: none;
-}
-.term-host .xterm-viewport::-webkit-scrollbar {
-  display: none;
 }
 
 /* ---- selection handles + action bar ---- */

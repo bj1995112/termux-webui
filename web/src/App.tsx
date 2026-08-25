@@ -28,63 +28,8 @@ export default function App() {
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
 
-  // ?diag=1: on-device layout probe for right-edge clipping reports. Renders
-  // live numbers so a phone screenshot is enough to pinpoint the culprit.
-  const diag = new URLSearchParams(location.search).get('diag') === '1';
-  useEffect(() => {
-    if (!diag) return;
-    const el = document.getElementById('diag');
-    if (!el) return;
-    const tick = () => {
-      const host = document.querySelector('.term-host');
-      const scr = (host?.querySelector('.xterm-screen') as HTMLElement | null) ?? null;
-      const vp = host?.querySelector('.xterm-viewport') as HTMLElement | null;
-      const row = [...(host?.querySelectorAll('.xterm-rows > div') ?? [])].find(
-        (d) => d.textContent && d.textContent.trim().length > 4,
-      ) as HTMLElement | undefined;
-      // measure real font advances with the terminal's own font stack
-      // (NOTE: .xterm-screen carries no font — the rows are the source of truth)
-      let cjkW = 0;
-      let cellW = 0;
-      if (row) {
-        const probe = document.createElement('span');
-        probe.style.cssText =
-          'position:absolute;visibility:hidden;white-space:pre;font-size:13px;font-family:' +
-          getComputedStyle(row).fontFamily;
-        probe.textContent = '中'.repeat(30);
-        document.body.appendChild(probe);
-        cjkW = probe.getBoundingClientRect().width / 30;
-        probe.textContent = 'M'.repeat(30);
-        cellW = probe.getBoundingClientRect().width / 30;
-        probe.remove();
-      }
-      const info = [
-        `dpr=${devicePixelRatio}`,
-        `hostW=${host?.clientWidth ?? '?'}`,
-        `screenW=${scr ? Math.round(scr.getBoundingClientRect().width * 10) / 10 : '?'}`,
-        `sbGap=${vp ? vp.offsetWidth - vp.clientWidth : '?'}`,
-        `rowClient=${row?.clientWidth ?? '?'}`,
-        `rowScroll=${row?.scrollWidth ?? '?'}`,
-        `rowOver=${row ? row.scrollWidth - row.clientWidth : '?'}`,
-        `cellW=${Math.round(cellW * 100) / 100}`,
-        `cjkW=${Math.round(cjkW * 100) / 100}`,
-        `drift/cjk=${cellW ? Math.round((cjkW - cellW * 2) * 100) / 100 : '?'}`,
-      ];
-      el.textContent = info.join('  ');
-    };
-    const iv = window.setInterval(tick, 500);
-    tick();
-    return () => clearInterval(iv);
-  }, [diag]);
-
   return (
     <div className="flex h-full flex-col">
-      {diag && (
-        <div
-          id="diag"
-          className="pointer-events-none fixed inset-x-0 top-0 z-[999] bg-black/85 px-2 py-1 font-mono text-[10px] leading-4 text-lime-300"
-        />
-      )}
       {/* Top bar */}
       <header className="flex items-center gap-2 border-b border-border bg-panel px-3 py-2">
         <span

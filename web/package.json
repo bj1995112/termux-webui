@@ -7,7 +7,6 @@
     "build": "tsc -b && vite build"
   },
   "dependencies": {
-    "@fontsource/jetbrains-mono": "^5.3.0",
     "@termux-webui/shared": "workspace:*",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
