@@ -61,12 +61,16 @@ app.post('/api/sessions/resume', async (c) => {
   if (!cli || !convId) return c.json({ error: 'cli and id required' }, 400);
 
   let args: string[] = [];
-  if (cli === 'claude') {
+  if (cli === 'codex') {
     args = ['resume', convId];
+  } else if (cli === 'pi') {
+    args = ['--session', convId];
   } else if (cli === 'agy') {
-    args = ['resume', convId];
+    args = ['--conversation', convId];
+  } else if (cli === 'claude') {
+    args = ['--resume', convId];
   } else if (cli === 'opencode') {
-    args = ['session', convId];
+    args = ['-s', convId];
   }
 
   return c.json(manager.create(cli, body.cwd, args), 201);
