@@ -6,8 +6,6 @@ export default function Drawer({ open, onClose }: { open: boolean; onClose: () =
   const [openSection, setOpenSection] = useState<'terminal' | 'theme' | 'security' | null>('terminal');
 
   // Terminal state
-  const rightReservePct = useDeck((s) => s.rightReservePct);
-  const setRightReservePct = useDeck((s) => s.setRightReservePct);
   const followOutput = useDeck((s) => s.followOutput);
   const toggleFollowOutput = useDeck((s) => s.toggleFollowOutput);
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
@@ -85,24 +83,6 @@ export default function Drawer({ open, onClose }: { open: boolean; onClose: () =
 
                 {openSection === 'terminal' && (
                   <div className="border-t border-border/60 p-3.5 space-y-3.5 text-xs">
-                    {/* 右侧防裁切留白 */}
-                    <div>
-                      <div className="flex justify-between text-muted mb-1">
-                        <span>右侧防裁切留白</span>
-                        <span className="text-accent">{rightReservePct}%</span>
-                      </div>
-                      <input
-                        type="range"
-                        min={0}
-                        max={20}
-                        step={1}
-                        value={rightReservePct}
-                        onChange={(e) => setRightReservePct(Number(e.target.value))}
-                        className="h-5 w-full accent-accent"
-                      />
-                      <span className="text-[10px] text-muted">在右侧留出空白避免边缘字符被切，0% 为完全铺满</span>
-                    </div>
-
                     {/* 跟随输出 */}
                     <label className="flex items-center justify-between cursor-pointer">
                       <div>
@@ -149,8 +129,8 @@ export default function Drawer({ open, onClose }: { open: boolean; onClose: () =
 
                 {openSection === 'theme' && (
                   <div className="border-t border-border/60 p-3.5 text-xs text-muted space-y-2">
-                    <p>• 当前主题：Termux 经典深黑 (JetBrains Mono)</p>
-                    <p className="text-[11px] italic">（更多配色与字体自定义将在后续版本上线）</p>
+                    <p>• 当前字体栈：JetBrains Mono / Roboto Mono</p>
+                    <p>• 自动硬件级安全边距已激活（防裁切）</p>
                   </div>
                 )}
               </div>

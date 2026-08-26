@@ -62,7 +62,6 @@ export default function TermView({ sessionId, active }: Props) {
   const [, setScrollTick] = useState(0);
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
-  const rightReservePct = useDeck((s) => s.rightReservePct);
   const followRefs = new Map<string, { current: boolean }>();
 
   // Create once per session.
@@ -71,7 +70,7 @@ export default function TermView({ sessionId, active }: Props) {
     if (!host) return;
     const term = new Terminal({
       theme: DARK,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontFamily: '"JetBrains Mono", "Roboto Mono", "Fira Code", ui-monospace, Menlo, Monaco, monospace',
       fontSize: 13,
       lineHeight: 1.25,
       cursorBlink: true,
@@ -91,11 +90,30 @@ export default function TermView({ sessionId, active }: Props) {
     const fitNow = () => {
       if (host.clientWidth > 0 && host.clientHeight > 0) {
         fit.fit();
+        // High-precision physical grid auto-fit with hardware safe margin
+        const core = (term as unknown as { _core?: { _renderService?: { dimensions?: { actualCellWidth: number } } } })._core;
+        const cellWidth = core?._renderService?.dimensions?.actualCellWidth || 0;
+        if (cellWidth > 0) {
+          const SAFE_PAD_X = 10; // 5px breathing room on each side
+          const availWidth = Math.max(10, host.clientWidth - SAFE_PAD_X);
+          const safeCols = Math.max(10, Math.floor(availWidth / cellWidth));
+          if (safeCols < term.cols) {
+            term.resize(safeCols, term.rows);
+          }
+        }
         deckSocket.send({ type: 'resize', sessionId, cols: term.cols, rows: term.rows });
       }
     };
     fitFns.set(sessionId, fitNow);
-    fitNow();
+
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(() => {
+        requestAnimationFrame(fitNow);
+      });
+    } else {
+      fitNow();
+    }
+
 
     // ---- follow output -----------------------------------------------------
     const followRef = { current: followOutput };
@@ -438,9 +456,6 @@ export default function TermView({ sessionId, active }: Props) {
     if (active) requestAnimationFrame(() => fitFns.get(sessionId)?.());
   }, [active, sessionId]);
 
-  useEffect(() => {
-    fitFns.get(sessionId)?.();
-  }, [rightReservePct, sessionId]);
 
   const handleCoords = (which: 'a' | 'b') => {
     if (!handles) return null;
