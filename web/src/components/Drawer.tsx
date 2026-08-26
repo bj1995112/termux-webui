@@ -8,18 +8,51 @@ interface Props {
   onNewSession: () => void;
 }
 
-function formatRelativeTime(ts: number): string {
+function pad(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+
+/** Formats friendly time for top-right of unexpanded card */
+function formatFriendlyTime(ts?: number): string {
   if (!ts) return '未知时间';
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return '刚刚';
-  if (mins < 60) return `${mins}分钟前`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}小时前`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}天前`;
+  const now = Date.now();
+  const diff = now - ts;
+  if (diff >= 0 && diff < 60000) return '刚刚';
+  if (diff >= 0 && diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
+
   const d = new Date(ts);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  const today = new Date(now);
+  const isToday =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+
+  if (isToday) {
+    return `今天 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  const yesterday = new Date(now - 86400000);
+  const isYesterday =
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate();
+
+  if (isYesterday) {
+    return `昨天 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  if (d.getFullYear() === today.getFullYear()) {
+    return `${d.getMonth() + 1}月${d.getDate()}日`;
+  }
+
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/** Formats exact date down to second for expanded card details */
+function formatExactDate(ts?: number): string {
+  if (!ts) return '未知时间';
+  const d = new Date(ts);
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 const CLI_CONFIG: Record<string, { icon: string; name: string; color: string }> = {
@@ -324,15 +357,18 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                           key={`${conv.cli}-${conv.id}`}
                           className="rounded-lg border border-border bg-panel p-2.5 transition-all text-xs hover:border-accent/40"
                         >
-                          {/* Top Row: Software Badge + Relative Time */}
+                          {/* Top Row: Software Badge + Relative Friendly Time */}
                           <div className="flex items-center justify-between gap-1.5 mb-1.5">
                             <span
                               className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${conf.color}`}
                             >
                               {conf.icon} {conf.name}
                             </span>
-                            <span className="text-[10px] text-muted font-mono">
-                              {formatRelativeTime(conv.updatedAt)}
+                            <span
+                              className="text-[10px] text-muted font-mono"
+                              title={`最后活跃：${formatExactDate(conv.updatedAt)}`}
+                            >
+                              {formatFriendlyTime(conv.updatedAt)}
                             </span>
                           </div>
 
@@ -351,18 +387,32 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                             </p>
                           </div>
 
-                          {/* Expanded Details */}
+                          {/* Expanded Details: Exact Timeline & Metadata */}
                           {isExpanded && (
-                            <div className="mt-2 pt-2 border-t border-border/60 text-[11px] text-muted space-y-1">
+                            <div className="mt-2 pt-2 border-t border-border/60 text-[11px] text-muted space-y-1.5">
                               {conv.firstPrompt && (
-                                <p className="text-text/90 bg-panel2 p-1.5 rounded select-text break-words leading-relaxed">
-                                  <span className="font-semibold text-accent">提问内容：</span>
-                                  {conv.firstPrompt}
-                                </p>
+                                <div className="text-text/90 bg-panel2 p-2 rounded select-text break-words leading-relaxed">
+                                  <span className="font-semibold text-accent block text-[10px] mb-0.5">
+                                    💬 首次提问内容：
+                                  </span>
+                                  <p>{conv.firstPrompt}</p>
+                                </div>
                               )}
-                              <div className="flex items-center justify-between text-[10px] pt-1 font-mono">
-                                <span>消息数: {conv.messageCount ?? 1} 轮</span>
-                                <span>ID: {conv.id.slice(0, 10)}...</span>
+
+                              {/* Exact Dates */}
+                              <div className="rounded bg-panel2/60 p-2 space-y-1 text-[10px] font-mono text-muted">
+                                <div className="flex items-center justify-between">
+                                  <span>📅 发起时间:</span>
+                                  <span className="text-text">{formatExactDate(conv.createdAt)}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span>🔄 最近活跃:</span>
+                                  <span className="text-text">{formatExactDate(conv.updatedAt)}</span>
+                                </div>
+                                <div className="flex items-center justify-between pt-0.5 border-t border-border/40">
+                                  <span>📊 对话轮次: {conv.messageCount ?? 1} 轮</span>
+                                  <span>ID: {conv.id.slice(0, 10)}...</span>
+                                </div>
                               </div>
                             </div>
                           )}

@@ -22,7 +22,7 @@ function cleanTitle(raw?: string): string {
   return text.length > 80 ? text.slice(0, 77) + '...' : text;
 }
 
-/** 1. Scan Codex Conversations */
+/** 1. Scan Codex Conversations with exact timestamps */
 async function scanCodexConversations(): Promise<AgentConversation[]> {
   const list: AgentConversation[] = [];
   const codexDir = path.join(HOME, '.codex');
@@ -31,7 +31,7 @@ async function scanCodexConversations(): Promise<AgentConversation[]> {
   const historyFile = path.join(codexDir, 'history.jsonl');
   const sessionMap = new Map<
     string,
-    { title: string; firstPrompt: string; count: number; ts: number; latestTs: number }
+    { title: string; firstPrompt: string; count: number; createdAt: number; updatedAt: number }
   >();
 
   if (fs.existsSync(historyFile)) {
@@ -50,13 +50,13 @@ async function scanCodexConversations(): Promise<AgentConversation[]> {
               title: cleanTitle(text),
               firstPrompt: text,
               count: 1,
-              ts,
-              latestTs: ts,
+              createdAt: ts,
+              updatedAt: ts,
             });
           } else {
             const cur = sessionMap.get(sId)!;
             cur.count++;
-            cur.latestTs = Math.max(cur.latestTs, ts);
+            cur.updatedAt = Math.max(cur.updatedAt, ts);
           }
         } catch {
           /* ignore */
@@ -67,7 +67,7 @@ async function scanCodexConversations(): Promise<AgentConversation[]> {
     }
   }
 
-  // Also scan sessions folder if exists
+  // Also scan sessions folder
   const sessionsFolder = path.join(codexDir, 'sessions');
   if (fs.existsSync(sessionsFolder)) {
     try {
@@ -78,17 +78,31 @@ async function scanCodexConversations(): Promise<AgentConversation[]> {
           if (entry.isDirectory()) {
             walk(full);
           } else if (entry.name.endsWith('.jsonl')) {
-            const stat = fs.statSync(full);
-            // Match rollout-DATE-ID.jsonl
             const match = entry.name.match(/([0-9a-fA-F\-]{30,})/);
             const id = match ? match[1] : entry.name.replace('.jsonl', '');
+            
+            // Extract ISO date from filename e.g. rollout-2026-08-23T12-07-19...
+            let fileTs = 0;
+            const dateMatch = entry.name.match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
+            if (dateMatch) {
+              const iso = dateMatch[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3Z');
+              fileTs = new Date(iso).getTime();
+            }
+            if (!fileTs) {
+              try {
+                fileTs = fs.statSync(full).mtimeMs;
+              } catch {
+                fileTs = Date.now();
+              }
+            }
+
             if (!sessionMap.has(id)) {
               sessionMap.set(id, {
                 title: `Codex 会话 ${id.slice(0, 8)}`,
                 firstPrompt: '',
                 count: 1,
-                ts: stat.birthtimeMs || stat.ctimeMs || Date.now(),
-                latestTs: stat.mtimeMs || Date.now(),
+                createdAt: fileTs,
+                updatedAt: fileTs,
               });
             }
           }
@@ -108,8 +122,8 @@ async function scanCodexConversations(): Promise<AgentConversation[]> {
       title: info.title,
       firstPrompt: info.firstPrompt ? cleanTitle(info.firstPrompt) : undefined,
       cwd: HOME,
-      updatedAt: info.latestTs,
-      createdAt: info.ts,
+      updatedAt: info.updatedAt,
+      createdAt: info.createdAt,
       messageCount: info.count,
     });
   }
@@ -117,7 +131,7 @@ async function scanCodexConversations(): Promise<AgentConversation[]> {
   return list;
 }
 
-/** 2. Scan Pi Coding Agent Conversations */
+/** 2. Scan Pi Coding Agent Conversations with exact message timestamps */
 async function scanPiConversations(): Promise<AgentConversation[]> {
   const list: AgentConversation[] = [];
   const piSessionsDir = path.join(HOME, '.pi/agent/sessions');
@@ -132,23 +146,36 @@ async function scanPiConversations(): Promise<AgentConversation[]> {
           walk(full);
         } else if (entry.name.endsWith('.jsonl')) {
           try {
-            const stat = fs.statSync(full);
             const raw = fs.readFileSync(full, 'utf8');
             const lines = raw.split('\n');
             let sessionId = '';
             let cwd = HOME;
             let title = '';
             let count = 0;
+            let createdAt = 0;
+            let updatedAt = 0;
 
             for (const line of lines) {
               if (!line.trim()) continue;
               count++;
               try {
                 const parsed = JSON.parse(line);
+                let lineTs = 0;
+                if (parsed.timestamp) {
+                  lineTs = typeof parsed.timestamp === 'number' ? parsed.timestamp : new Date(parsed.timestamp).getTime();
+                }
+
                 if (parsed.type === 'session' && parsed.id) {
                   sessionId = parsed.id;
                   if (parsed.cwd) cwd = parsed.cwd;
+                  if (lineTs && !createdAt) createdAt = lineTs;
                 }
+
+                if (lineTs) {
+                  if (!createdAt) createdAt = lineTs;
+                  updatedAt = Math.max(updatedAt, lineTs);
+                }
+
                 if (!title && parsed.type === 'message' && parsed.message?.role === 'user') {
                   const content = parsed.message.content;
                   if (Array.isArray(content)) {
@@ -167,6 +194,15 @@ async function scanPiConversations(): Promise<AgentConversation[]> {
               }
             }
 
+            if (!createdAt) {
+              try {
+                createdAt = fs.statSync(full).birthtimeMs || fs.statSync(full).mtimeMs;
+              } catch {
+                createdAt = Date.now();
+              }
+            }
+            if (!updatedAt) updatedAt = createdAt;
+
             if (!sessionId) {
               const match = entry.name.match(/([0-9a-fA-F\-]{30,})/);
               sessionId = match ? match[1] : entry.name.replace('.jsonl', '');
@@ -178,8 +214,8 @@ async function scanPiConversations(): Promise<AgentConversation[]> {
               cliLabel: 'Pi Coding Agent',
               title: title || `Pi 会话: ${path.basename(dir).replace(/^-+|-+$/g, '') || '主目录'}`,
               cwd,
-              updatedAt: stat.mtimeMs || Date.now(),
-              createdAt: stat.birthtimeMs || stat.ctimeMs || Date.now(),
+              updatedAt,
+              createdAt,
               messageCount: count,
             });
           } catch {
@@ -196,7 +232,7 @@ async function scanPiConversations(): Promise<AgentConversation[]> {
   return list;
 }
 
-/** 3. Scan Antigravity (Agy) Conversations */
+/** 3. Scan Antigravity (Agy) Conversations with exact step timestamps */
 async function scanAgyConversations(): Promise<AgentConversation[]> {
   const list: AgentConversation[] = [];
   const brainDir = path.join(HOME, '.gemini/antigravity-cli/brain');
@@ -213,44 +249,51 @@ async function scanAgyConversations(): Promise<AgentConversation[]> {
       let title = '新会话';
       let firstPrompt = '';
       let msgCount = 0;
-      let updatedAt = Date.now();
-      let createdAt = Date.now();
-
-      try {
-        const stat = fs.statSync(convPath);
-        createdAt = stat.birthtimeMs || stat.ctimeMs || Date.now();
-        updatedAt = stat.mtimeMs || createdAt;
-      } catch {
-        /* ignore */
-      }
+      let createdAt = 0;
+      let updatedAt = 0;
 
       if (fs.existsSync(transcriptPath)) {
         try {
-          const tStat = fs.statSync(transcriptPath);
-          updatedAt = tStat.mtimeMs || updatedAt;
-
           const fileStream = fs.createReadStream(transcriptPath, { encoding: 'utf8' });
           const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
 
           for await (const line of rl) {
             if (!line.trim()) continue;
             msgCount++;
-            if (!firstPrompt) {
-              try {
-                const parsed = JSON.parse(line);
-                if (parsed.type === 'USER_INPUT' && typeof parsed.content === 'string') {
-                  firstPrompt = parsed.content;
-                  title = cleanTitle(parsed.content);
-                }
-              } catch {
-                /* parse error on line */
+            try {
+              const parsed = JSON.parse(line);
+              let lineTs = 0;
+              if (parsed.created_at) {
+                lineTs = new Date(parsed.created_at).getTime();
               }
+
+              if (lineTs) {
+                if (!createdAt) createdAt = lineTs;
+                updatedAt = Math.max(updatedAt, lineTs);
+              }
+
+              if (!firstPrompt && parsed.type === 'USER_INPUT' && typeof parsed.content === 'string') {
+                firstPrompt = parsed.content;
+                title = cleanTitle(parsed.content);
+              }
+            } catch {
+              /* parse error on line */
             }
           }
         } catch {
           /* ignore */
         }
       }
+
+      if (!createdAt) {
+        try {
+          const stat = fs.statSync(convPath);
+          createdAt = stat.birthtimeMs || stat.ctimeMs || Date.now();
+        } catch {
+          createdAt = Date.now();
+        }
+      }
+      if (!updatedAt) updatedAt = createdAt;
 
       list.push({
         id: convId,
@@ -265,7 +308,7 @@ async function scanAgyConversations(): Promise<AgentConversation[]> {
       });
     }
   } catch {
-    /* ignore */
+    /* ignore error reading brain dir */
   }
 
   return list;
