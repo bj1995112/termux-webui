@@ -59,3 +59,17 @@ export interface ProjectInfo {
   path: string;
 }
 
+export interface AgentConversation {
+  id: string;
+  cli: CliId;
+  cliLabel: string;
+  title: string;
+  firstPrompt?: string;
+  cwd: string;
+  updatedAt: number;
+  createdAt: number;
+  messageCount?: number;
+  tokenUsage?: number;
+}
+
+

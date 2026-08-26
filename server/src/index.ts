@@ -8,6 +8,7 @@ import { CliId, ClientMessage, type CreateSessionBody, type ServerMessage } from
 import { listClis } from './clis.js';
 import { listProjects } from './projects.js';
 import { SessionManager } from './sessions.js';
+import { listAllConversations, deleteConversation } from './history.js';
 
 const PORT = Number(process.env.PORT || 4150);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -23,8 +24,17 @@ app.get('/api/clis', (c) => c.json(listClis()));
 app.get('/api/projects', (c) => c.json(listProjects()));
 app.get('/api/sessions', (c) => c.json(manager.list()));
 
+app.get('/api/history', async (c) => {
+  const history = await listAllConversations();
+  return c.json(history);
+});
 
-
+app.delete('/api/history/:cli/:id', async (c) => {
+  const cli = c.req.param('cli') as CliId;
+  const id = c.req.param('id');
+  const ok = await deleteConversation(cli, id);
+  return c.json({ ok }, ok ? 200 : 404);
+});
 
 app.post('/api/sessions', async (c) => {
   const body = (await c.req.json().catch(() => null)) as CreateSessionBody | null;
@@ -44,10 +54,29 @@ app.post('/api/sessions', async (c) => {
   return c.json(manager.create(kind.data, body?.cwd, args, env), 201);
 });
 
+app.post('/api/sessions/resume', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { cli?: CliId; id?: string; cwd?: string } | null;
+  const cli = body?.cli;
+  const convId = body?.id;
+  if (!cli || !convId) return c.json({ error: 'cli and id required' }, 400);
+
+  let args: string[] = [];
+  if (cli === 'claude') {
+    args = ['resume', convId];
+  } else if (cli === 'agy') {
+    args = ['resume', convId];
+  } else if (cli === 'opencode') {
+    args = ['session', convId];
+  }
+
+  return c.json(manager.create(cli, body.cwd, args), 201);
+});
+
 app.delete('/api/sessions/:id', (c) => {
   const ok = manager.kill(c.req.param('id'));
   return c.json({ ok }, ok ? 200 : 404);
 });
+
 
 // --- Static web dist ----------------------------------------------------------
 

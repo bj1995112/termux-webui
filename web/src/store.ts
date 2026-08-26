@@ -1,21 +1,25 @@
 import { create } from 'zustand';
-import type { CliInfo, SessionInfo } from '@termux-webui/shared';
+import type { CliInfo, SessionInfo, AgentConversation, CliId } from '@termux-webui/shared';
 
 interface DeckState {
   clis: CliInfo[];
   sessions: SessionInfo[];
+  conversations: AgentConversation[];
   activeId: string | null;
   keyboardVisible: boolean;
   suppressKeyboard: boolean;
   followOutput: boolean;
   loadClis: () => Promise<void>;
   loadSessions: () => Promise<void>;
+  loadHistory: () => Promise<void>;
   createSession: (
     kind: SessionInfo['kind'],
     cwd?: string,
     args?: string[],
     env?: Record<string, string>,
   ) => Promise<SessionInfo>;
+  resumeConversation: (conv: AgentConversation) => Promise<SessionInfo>;
+  deleteHistory: (cli: CliId, id: string) => Promise<void>;
   killSession: (id: string) => Promise<void>;
   setActive: (id: string | null) => void;
   removeLocal: (id: string) => void;
@@ -37,6 +41,7 @@ const strPref = (key: string, fallback: string | null): string | null => {
 export const useDeck = create<DeckState>((set, get) => ({
   clis: [],
   sessions: [],
+  conversations: [],
   activeId: strPref('twui.activeId', null),
   keyboardVisible: true,
   suppressKeyboard: boolPref('twui.suppressKeyboard', false),
@@ -66,6 +71,17 @@ export const useDeck = create<DeckState>((set, get) => ({
     });
   },
 
+  loadHistory: async () => {
+    try {
+      const res = await fetch('/api/history');
+      if (res.ok) {
+        set({ conversations: await res.json() });
+      }
+    } catch {
+      /* ignore */
+    }
+  },
+
   createSession: async (kind, cwd, args, env) => {
     const res = await fetch('/api/sessions', {
       method: 'POST',
@@ -77,6 +93,26 @@ export const useDeck = create<DeckState>((set, get) => ({
     localStorage.setItem('twui.activeId', info.id);
     set((s) => ({ sessions: [...s.sessions, info], activeId: info.id }));
     return info;
+  },
+
+  resumeConversation: async (conv) => {
+    const res = await fetch('/api/sessions/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cli: conv.cli, id: conv.id, cwd: conv.cwd }),
+    });
+    if (!res.ok) throw new Error('resume failed');
+    const info: SessionInfo = await res.json();
+    localStorage.setItem('twui.activeId', info.id);
+    set((s) => ({ sessions: [...s.sessions, info], activeId: info.id }));
+    return info;
+  },
+
+  deleteHistory: async (cli, id) => {
+    await fetch(`/api/history/${cli}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    set((s) => ({
+      conversations: s.conversations.filter((c) => !(c.cli === cli && c.id === id)),
+    }));
   },
 
   killSession: async (id) => {
