@@ -1,8 +1,5 @@
 import { create } from 'zustand';
 import type { CliInfo, SessionInfo } from '@termux-webui/shared';
-import type { TranslateEngine, TranslateMode } from './lib/translator.js';
-import type { SimpleFocus } from './lib/simpleDetector.js';
-
 
 interface DeckState {
   clis: CliInfo[];
@@ -28,27 +25,7 @@ interface DeckState {
   toggleKeyboard: (visible?: boolean) => void;
   toggleSuppressKeyboard: (value?: boolean) => void;
   toggleFollowOutput: (value?: boolean) => void;
-
-  // ---- Focus Bar & Translation settings -----------------------------------
-  focusBarEnabled: boolean;
-  toggleFocusBar: (val?: boolean) => void;
-  activeFocus: SimpleFocus | null;
-  setActiveFocus: (focus: SimpleFocus | null) => void;
-
-  translateEngine: TranslateEngine;
-  setTranslateEngine: (engine: TranslateEngine) => void;
-
-  aiApiUrl: string;
-  setAiApiUrl: (url: string) => void;
-  aiApiKey: string;
-  setAiApiKey: (key: string) => void;
-  aiModel: string;
-  setAiModel: (model: string) => void;
-
-  customApiUrl: string;
-  setCustomApiUrl: (url: string) => void;
 }
-
 
 const boolPref = (key: string, fallback: boolean): boolean => {
   const saved = localStorage.getItem(key);
@@ -61,11 +38,6 @@ const numPref = (key: string, fallback: number): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-const strPref = (key: string, fallback: string): string => {
-  const saved = localStorage.getItem(key);
-  return saved === null ? fallback : saved;
-};
-
 export const useDeck = create<DeckState>((set, get) => ({
   clis: [],
   sessions: [],
@@ -75,53 +47,7 @@ export const useDeck = create<DeckState>((set, get) => ({
   followOutput: boolPref('twui.followOutput', true),
   rightReservePct: numPref('twui.rightReservePct', 5),
 
-  focusBarEnabled: boolPref('twui.focusBarEnabled', true),
-  activeFocus: null,
-  setActiveFocus: (focus) => set({ activeFocus: focus }),
-
-  translateEngine: (strPref('twui.translateEngine', 'auto') as TranslateEngine),
-  aiApiUrl: strPref('twui.aiApiUrl', 'https://api.deepseek.com/v1'),
-  aiApiKey: strPref('twui.aiApiKey', ''),
-  aiModel: strPref('twui.aiModel', 'deepseek-chat'),
-  customApiUrl: strPref('twui.customApiUrl', ''),
-
-  toggleFocusBar: (val) => {
-    const next = val ?? !get().focusBarEnabled;
-    localStorage.setItem('twui.focusBarEnabled', next ? '1' : '0');
-    set({ focusBarEnabled: next });
-  },
-
-
-  setTranslateEngine: (engine) => {
-    localStorage.setItem('twui.translateEngine', engine);
-    set({ translateEngine: engine });
-  },
-
-
-  setAiApiUrl: (url) => {
-    localStorage.setItem('twui.aiApiUrl', url);
-    set({ aiApiUrl: url });
-  },
-
-  setAiApiKey: (key) => {
-    localStorage.setItem('twui.aiApiKey', key);
-    set({ aiApiKey: key });
-  },
-
-  setAiModel: (model) => {
-    localStorage.setItem('twui.aiModel', model);
-    set({ aiModel: model });
-  },
-
-  setCustomApiUrl: (url) => {
-    localStorage.setItem('twui.customApiUrl', url);
-    set({ customApiUrl: url });
-  },
-
   loadClis: async () => {
-
-
-
     const res = await fetch('/api/clis');
     set({ clis: await res.json() });
   },
@@ -145,10 +71,8 @@ export const useDeck = create<DeckState>((set, get) => ({
     if (!res.ok) throw new Error('create failed');
     const info: SessionInfo = await res.json();
     set((s) => ({ sessions: [...s.sessions, info], activeId: info.id }));
-    // attach happens in TermView once its message handler is registered.
     return info;
   },
-
 
   killSession: async (id) => {
     await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
@@ -156,8 +80,6 @@ export const useDeck = create<DeckState>((set, get) => ({
   },
 
   setActive: (id) => {
-    // No attach here — TermView attaches itself after registering its
-    // message handler, so the prompt can never arrive un-received.
     set({ activeId: id });
   },
 
@@ -191,5 +113,3 @@ export const useDeck = create<DeckState>((set, get) => ({
     set({ rightReservePct: clamped });
   },
 }));
-
-

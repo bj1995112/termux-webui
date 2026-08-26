@@ -8,7 +8,6 @@ import { CliId, ClientMessage, type CreateSessionBody, type ServerMessage } from
 import { listClis } from './clis.js';
 import { listProjects } from './projects.js';
 import { SessionManager } from './sessions.js';
-import { performTranslation, type TranslateParams } from './translate.js';
 
 const PORT = Number(process.env.PORT || 4150);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -24,31 +23,6 @@ app.get('/api/clis', (c) => c.json(listClis()));
 app.get('/api/projects', (c) => c.json(listProjects()));
 app.get('/api/sessions', (c) => c.json(manager.list()));
 
-app.post('/api/translate', async (c) => {
-  const body = (await c.req.json().catch(() => ({}))) as {
-    text?: string;
-    engine?: TranslateParams['engine'];
-    aiConfig?: { apiUrl?: string; apiKey?: string; model?: string };
-    customUrl?: string;
-  };
-  const text = typeof body?.text === 'string' ? body.text : '';
-  if (!text.trim()) return c.json({ ok: true, result: '', source: 'none' });
-
-  const engine = body.engine || 'auto';
-  try {
-    const { text: result, source } = await performTranslation(text, {
-      engine,
-      aiApiUrl: body.aiConfig?.apiUrl,
-      aiApiKey: body.aiConfig?.apiKey,
-      aiModel: body.aiConfig?.model,
-      customApiUrl: body.customUrl,
-    });
-    return c.json({ ok: true, result, source });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ ok: false, error: message }, 500);
-  }
-});
 
 
 
