@@ -92,6 +92,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   const [activeCliFilter, setActiveCliFilter] = useState<'all' | CliId>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -275,19 +276,39 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
           {/* 2. 统一 AI 历史对话中枢 (Unified Historical Conversations Hub) */}
           {/* =================================================================== */}
           <div className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
-            <button
-              onClick={() => setOpenHistory(!openHistory)}
-              className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-bold text-text hover:bg-panel2/80 active:bg-panel2"
-            >
-              <div className="flex items-center gap-2">
+            <div className="flex w-full items-center justify-between px-3.5 py-2 text-left text-xs font-bold text-text hover:bg-panel2/80 active:bg-panel2">
+              <div
+                onClick={() => setOpenHistory(!openHistory)}
+                className="flex items-center gap-2 cursor-pointer flex-1"
+              >
                 <span className="text-sm">📚</span>
                 <span>AI 历史对话中枢</span>
                 <span className="rounded-full bg-border px-1.5 py-0.2 text-[10px] font-semibold text-muted">
                   {conversations.length}
                 </span>
               </div>
-              <span className="text-xs text-muted">{openHistory ? '▾' : '▸'}</span>
-            </button>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsRefreshing(true);
+                    void loadHistory().finally(() => setTimeout(() => setIsRefreshing(false), 400));
+                  }}
+                  className={`p-1 rounded text-muted hover:text-text hover:bg-panel active:text-accent transition-transform ${
+                    isRefreshing ? 'animate-spin text-accent' : ''
+                  }`}
+                  title="立即刷新历史列表"
+                >
+                  🔄
+                </button>
+                <span
+                  onClick={() => setOpenHistory(!openHistory)}
+                  className="text-xs text-muted cursor-pointer px-1"
+                >
+                  {openHistory ? '▾' : '▸'}
+                </span>
+              </div>
+            </div>
 
             {openHistory && (
               <div className="border-t border-border/60 p-2.5 space-y-2">

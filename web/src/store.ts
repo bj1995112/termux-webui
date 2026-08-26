@@ -129,7 +129,10 @@ export const useDeck = create<DeckState>((set, get) => ({
     set({ activeId: id });
   },
 
-  removeLocal: (id) =>
+  removeLocal: (id) => {
+    setTimeout(() => {
+      void get().loadHistory();
+    }, 400);
     set((s) => {
       const sessions = s.sessions.filter((x) => x.id !== id);
       const nextActive = s.activeId === id ? (sessions.at(-1)?.id ?? null) : s.activeId;
@@ -142,7 +145,8 @@ export const useDeck = create<DeckState>((set, get) => ({
         sessions,
         activeId: nextActive,
       };
-    }),
+    });
+  },
 
   toggleKeyboard: (visible) =>
     set((s) => ({ keyboardVisible: visible ?? !s.keyboardVisible })),
