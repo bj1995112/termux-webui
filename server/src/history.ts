@@ -6,8 +6,23 @@ import type { AgentConversation, CliId } from '@termux-webui/shared';
 
 const HOME = homedir();
 
+function pad(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+
+function formatFallbackTitle(ts: number, projectName?: string): string {
+  if (!ts) return '新对话';
+  const d = new Date(ts);
+  const month = d.getMonth() + 1;
+  const date = d.getDate();
+  const hours = pad(d.getHours());
+  const mins = pad(d.getMinutes());
+  const tag = projectName && projectName !== 'root' && projectName !== '~' ? ` · ${projectName}` : '';
+  return `${month}月${date}日 ${hours}:${mins} 对话${tag}`;
+}
+
 function cleanTitle(raw?: string): string {
-  if (!raw) return '新会话';
+  if (!raw) return '';
   const userMatch = raw.match(/<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/i);
   let text = userMatch ? userMatch[1] : raw;
   text = text
@@ -18,7 +33,6 @@ function cleanTitle(raw?: string): string {
     .replace(/The user changed setting[\s\S]*$/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!text) text = '新会话';
   return text.length > 80 ? text.slice(0, 77) + '...' : text;
 }
 
@@ -45,9 +59,10 @@ async function scanCodexConversations(): Promise<AgentConversation[]> {
           const sId = item.session_id || 'default';
           const text = item.text || '';
           const ts = item.ts ? Number(item.ts) * 1000 : Date.now();
+          const parsedTitle = cleanTitle(text) || formatFallbackTitle(ts);
           if (!sessionMap.has(sId)) {
             sessionMap.set(sId, {
-              title: cleanTitle(text),
+              title: parsedTitle,
               firstPrompt: text,
               count: 1,
               createdAt: ts,
@@ -98,7 +113,7 @@ async function scanCodexConversations(): Promise<AgentConversation[]> {
 
             if (!sessionMap.has(id)) {
               sessionMap.set(id, {
-                title: `Codex 会话 ${id.slice(0, 8)}`,
+                title: formatFallbackTitle(fileTs),
                 firstPrompt: '',
                 count: 1,
                 createdAt: fileTs,
@@ -208,11 +223,12 @@ async function scanPiConversations(): Promise<AgentConversation[]> {
               sessionId = match ? match[1] : entry.name.replace('.jsonl', '');
             }
 
+            const projName = path.basename(dir).replace(/^-+|-+$/g, '') || '';
             list.push({
               id: sessionId,
               cli: 'pi',
               cliLabel: 'Pi Coding Agent',
-              title: title || `Pi 会话: ${path.basename(dir).replace(/^-+|-+$/g, '') || '主目录'}`,
+              title: title || formatFallbackTitle(createdAt, projName),
               cwd,
               updatedAt,
               createdAt,
@@ -246,7 +262,7 @@ async function scanAgyConversations(): Promise<AgentConversation[]> {
       const convPath = path.join(brainDir, convId);
       const transcriptPath = path.join(convPath, '.system_generated/logs/transcript.jsonl');
 
-      let title = '新会话';
+      let title = '';
       let firstPrompt = '';
       let msgCount = 0;
       let createdAt = 0;
@@ -299,7 +315,7 @@ async function scanAgyConversations(): Promise<AgentConversation[]> {
         id: convId,
         cli: 'agy',
         cliLabel: 'Antigravity (Agy)',
-        title,
+        title: title || formatFallbackTitle(createdAt),
         firstPrompt: firstPrompt ? cleanTitle(firstPrompt) : undefined,
         cwd: HOME,
         updatedAt,
@@ -327,6 +343,7 @@ async function scanClaudeConversations(): Promise<AgentConversation[]> {
       try {
         const stat = fs.statSync(projPath);
         const resolvedPath = entry.name.startsWith('-') ? entry.name.replace(/^-/, '/') : HOME;
+        const created = stat.birthtimeMs || stat.ctimeMs || Date.now();
         list.push({
           id: entry.name,
           cli: 'claude',
@@ -334,7 +351,7 @@ async function scanClaudeConversations(): Promise<AgentConversation[]> {
           title: `Claude 项目: ${resolvedPath}`,
           cwd: resolvedPath,
           updatedAt: stat.mtimeMs || Date.now(),
-          createdAt: stat.birthtimeMs || stat.ctimeMs || Date.now(),
+          createdAt: created,
           messageCount: 1,
         });
       } catch {
@@ -362,14 +379,15 @@ async function scanOpenCodeConversations(): Promise<AgentConversation[]> {
       const id = file.replace(/\.json$/, '');
       try {
         const stat = fs.statSync(filePath);
+        const created = stat.birthtimeMs || stat.ctimeMs || Date.now();
         list.push({
           id,
           cli: 'opencode',
           cliLabel: 'OpenCode',
-          title: `OpenCode 会话 ${id.slice(0, 12)}`,
+          title: formatFallbackTitle(created),
           cwd: HOME,
           updatedAt: stat.mtimeMs || Date.now(),
-          createdAt: stat.birthtimeMs || stat.ctimeMs || Date.now(),
+          createdAt: created,
           messageCount: 1,
         });
       } catch {
