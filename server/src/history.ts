@@ -82,60 +82,14 @@ async function scanCodexConversations(): Promise<AgentConversation[]> {
     }
   }
 
-  // Also scan sessions folder
-  const sessionsFolder = path.join(codexDir, 'sessions');
-  if (fs.existsSync(sessionsFolder)) {
-    try {
-      const walk = (dir: string) => {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const full = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            walk(full);
-          } else if (entry.name.endsWith('.jsonl')) {
-            const match = entry.name.match(/([0-9a-fA-F\-]{30,})/);
-            const id = match ? match[1] : entry.name.replace('.jsonl', '');
-            
-            // Extract ISO date from filename e.g. rollout-2026-08-23T12-07-19...
-            let fileTs = 0;
-            const dateMatch = entry.name.match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})/);
-            if (dateMatch) {
-              const iso = dateMatch[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3Z');
-              fileTs = new Date(iso).getTime();
-            }
-            if (!fileTs) {
-              try {
-                fileTs = fs.statSync(full).mtimeMs;
-              } catch {
-                fileTs = Date.now();
-              }
-            }
-
-            if (!sessionMap.has(id)) {
-              sessionMap.set(id, {
-                title: formatFallbackTitle(fileTs),
-                firstPrompt: '',
-                count: 1,
-                createdAt: fileTs,
-                updatedAt: fileTs,
-              });
-            }
-          }
-        }
-      };
-      walk(sessionsFolder);
-    } catch {
-      /* ignore */
-    }
-  }
-
   for (const [id, info] of sessionMap.entries()) {
+    if (!info.firstPrompt) continue;
     list.push({
       id,
       cli: 'codex',
       cliLabel: 'Codex',
       title: info.title,
-      firstPrompt: info.firstPrompt ? cleanTitle(info.firstPrompt) : undefined,
+      firstPrompt: cleanTitle(info.firstPrompt) || undefined,
       cwd: HOME,
       updatedAt: info.updatedAt,
       createdAt: info.createdAt,
@@ -223,6 +177,7 @@ async function scanPiConversations(): Promise<AgentConversation[]> {
               sessionId = match ? match[1] : entry.name.replace('.jsonl', '');
             }
 
+            if (!title) return; // Skip 0-turn empty session
             const projName = path.basename(dir).replace(/^-+|-+$/g, '') || '';
             list.push({
               id: sessionId,
@@ -300,6 +255,8 @@ async function scanAgyConversations(): Promise<AgentConversation[]> {
           /* ignore */
         }
       }
+
+      if (!firstPrompt) continue; // Skip 0-turn empty conversation
 
       if (!createdAt) {
         try {
