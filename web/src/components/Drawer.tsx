@@ -85,7 +85,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
 
   // Accordion state
   const [openActive, setOpenActive] = useState(true);
-  const [openHistory, setOpenHistory] = useState(true);
+  const [openHistory, setOpenHistory] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
 
   // History filtering & search
