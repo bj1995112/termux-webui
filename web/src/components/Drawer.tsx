@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useDeck } from '../store.js';
 import type { AgentConversation, CliId } from '@termux-webui/shared';
 
@@ -22,16 +22,16 @@ function formatRelativeTime(ts: number): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-const CLI_ICONS: Record<string, string> = {
-  agy: '🔮',
-  claude: '🤖',
-  opencode: '💻',
-  codex: '⚡',
-  pi: '🥧',
-  shell: '🐚',
-  aider: '🛠️',
-  openclaw: '🦞',
-  hermes: '🕊️',
+const CLI_CONFIG: Record<string, { icon: string; name: string; color: string }> = {
+  codex: { icon: '⚡', name: 'Codex', color: 'text-amber-400 bg-amber-400/15 border-amber-400/30' },
+  pi: { icon: '🥧', name: 'Pi Agent', color: 'text-rose-400 bg-rose-400/15 border-rose-400/30' },
+  agy: { icon: '🔮', name: 'Antigravity', color: 'text-cyan-400 bg-cyan-400/15 border-cyan-400/30' },
+  claude: { icon: '🤖', name: 'Claude', color: 'text-purple-400 bg-purple-400/15 border-purple-400/30' },
+  opencode: { icon: '💻', name: 'OpenCode', color: 'text-blue-400 bg-blue-400/15 border-blue-400/30' },
+  shell: { icon: '🐚', name: 'Shell', color: 'text-emerald-400 bg-emerald-400/15 border-emerald-400/30' },
+  aider: { icon: '🛠️', name: 'Aider', color: 'text-yellow-400 bg-yellow-400/15 border-yellow-400/30' },
+  openclaw: { icon: '🦞', name: 'OpenClaw', color: 'text-red-400 bg-red-400/15 border-red-400/30' },
+  hermes: { icon: '🕊️', name: 'Hermes', color: 'text-indigo-400 bg-indigo-400/15 border-indigo-400/30' },
 };
 
 export default function Drawer({ open, onClose, onNewSession }: Props) {
@@ -50,15 +50,14 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const toggleSuppressKeyboard = useDeck((s) => s.toggleSuppressKeyboard);
 
-  // Multi-accordion state: allows independent expansion
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    active_terminals: true,
-    history_agy: true,
-    history_claude: true,
-    history_opencode: true,
-  });
+  // Accordion state
+  const [openActive, setOpenActive] = useState(true);
+  const [openHistory, setOpenHistory] = useState(true);
+  const [openSettings, setOpenSettings] = useState(false);
 
-  // Selected card expansion for seeing more details
+  // History filtering & search
+  const [activeCliFilter, setActiveCliFilter] = useState<'all' | CliId>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -66,10 +65,6 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
       void loadHistory();
     }
   }, [open, loadHistory]);
-
-  const toggleSection = (key: string) => {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
 
   const close = () => {
     onClose();
@@ -100,15 +95,36 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
     }
   };
 
-  // Group conversations by CLI kind
-  const cliGroups = conversations.reduce((acc, conv) => {
-    const key = conv.cli;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(conv);
-    return acc;
-  }, {} as Record<CliId, AgentConversation[]>);
+  // Group stats for filter pills
+  const countsByCli = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of conversations) {
+      map[c.cli] = (map[c.cli] || 0) + 1;
+    }
+    return map;
+  }, [conversations]);
 
-  const groupKeys = Object.keys(cliGroups) as CliId[];
+  const availableClis = useMemo(() => {
+    return Object.keys(countsByCli) as CliId[];
+  }, [countsByCli]);
+
+  // Filtered conversation list
+  const filteredConversations = useMemo(() => {
+    let list = conversations;
+    if (activeCliFilter !== 'all') {
+      list = list.filter((c) => c.cli === activeCliFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.cwd.toLowerCase().includes(q) ||
+          (c.firstPrompt && c.firstPrompt.toLowerCase().includes(q)),
+      );
+    }
+    return list;
+  }, [conversations, activeCliFilter, searchQuery]);
 
   return (
     <div className={`fixed inset-0 z-[80] ${open ? '' : 'pointer-events-none'}`}>
@@ -122,12 +138,12 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
 
       {/* Drawer Sidebar */}
       <aside
-        className={`absolute inset-y-0 left-0 flex w-[86%] max-w-[360px] flex-col border-r border-border bg-panel shadow-2xl transition-transform duration-200 ${
+        className={`absolute inset-y-0 left-0 flex w-[88%] max-w-[370px] flex-col border-r border-border bg-panel shadow-2xl transition-transform duration-200 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3.5 bg-panel2/40">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3.5 bg-panel2/50">
           <div>
             <p className="text-base font-bold text-accent">▚ Termux WebUI</p>
             <p className="text-xs text-muted">全能 Agent 调度控制台</p>
@@ -141,14 +157,14 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
           </button>
         </div>
 
-        {/* Scrollable Accordion Container */}
+        {/* Scrollable Accordion Canvas */}
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
           {/* =================================================================== */}
-          {/* SECTION 1: 当前活跃终端 (Active Running PTY Sessions) */}
+          {/* 1. 当前活跃终端 (Active Running Sessions) */}
           {/* =================================================================== */}
           <div className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
             <button
-              onClick={() => toggleSection('active_terminals')}
+              onClick={() => setOpenActive(!openActive)}
               className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-bold text-text hover:bg-panel2/80 active:bg-panel2"
             >
               <div className="flex items-center gap-2">
@@ -158,12 +174,10 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                   {sessions.length}
                 </span>
               </div>
-              <span className="text-xs text-muted">
-                {openSections['active_terminals'] ? '▾' : '▸'}
-              </span>
+              <span className="text-xs text-muted">{openActive ? '▾' : '▸'}</span>
             </button>
 
-            {openSections['active_terminals'] && (
+            {openActive && (
               <div className="border-t border-border/60 p-2 space-y-1.5">
                 {sessions.length === 0 ? (
                   <div className="py-4 text-center text-xs text-muted">
@@ -172,6 +186,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                 ) : (
                   sessions.map((s, idx) => {
                     const isCur = s.id === activeId;
+                    const conf = CLI_CONFIG[s.kind] || { icon: '🐚', name: s.kind, color: '' };
                     return (
                       <div
                         key={s.id}
@@ -191,7 +206,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                           <div className="overflow-hidden">
                             <div className="flex items-center gap-1.5">
                               <span className="text-xs font-semibold text-text">
-                                #{idx + 1} {s.kind}
+                                #{idx + 1} {conf.icon} {s.kind}
                               </span>
                               {isCur && (
                                 <span className="rounded bg-accent/20 px-1 text-[9px] font-bold text-accent">
@@ -224,129 +239,177 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
           </div>
 
           {/* =================================================================== */}
-          {/* SECTION 2+: 动态 AI 编程软件历史对话折叠列表 (Grouped by CLI) */}
-          {/* =================================================================== */}
-          {groupKeys.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-muted">
-              <p className="text-sm mb-1">📚 暂未检测到历史对话</p>
-              <p className="text-[11px]">当您使用 AI 工具（Agy, Claude 等）完成对话后，将自动在此聚拢归档。</p>
-            </div>
-          ) : (
-            groupKeys.map((cli) => {
-              const list = cliGroups[cli] || [];
-              const secKey = `history_${cli}`;
-              const isOpen = openSections[secKey] ?? true;
-              const cliIcon = CLI_ICONS[cli] || '🤖';
-              const cliTitle = list[0]?.cliLabel || cli;
-
-              return (
-                <div key={cli} className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
-                  {/* Group Header */}
-                  <button
-                    onClick={() => toggleSection(secKey)}
-                    className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-bold text-text hover:bg-panel2/80 active:bg-panel2"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{cliIcon}</span>
-                      <span>{cliTitle} 历史对话</span>
-                      <span className="rounded-full bg-border px-1.5 py-0.2 text-[10px] font-semibold text-muted">
-                        {list.length}
-                      </span>
-                    </div>
-                    <span className="text-xs text-muted">{isOpen ? '▾' : '▸'}</span>
-                  </button>
-
-                  {/* Vertically Scrollable Conversation List */}
-                  {isOpen && (
-                    <div className="border-t border-border/60 p-2 max-h-[300px] overflow-y-auto space-y-1.5 overscroll-contain">
-                      {list.map((conv) => {
-                        const isExpanded = expandedCardId === conv.id;
-
-                        return (
-                          <div
-                            key={conv.id}
-                            className="rounded-lg border border-border bg-panel p-2.5 transition-all text-xs"
-                          >
-                            {/* Card Header (Click to toggle details) */}
-                            <div
-                              onClick={() => setExpandedCardId(isExpanded ? null : conv.id)}
-                              className="cursor-pointer"
-                            >
-                              <div className="flex items-start justify-between gap-1.5 mb-1">
-                                <p className="font-semibold text-text leading-snug line-clamp-2 select-text">
-                                  {conv.title}
-                                </p>
-                                <span className="flex-shrink-0 text-[10px] text-muted">
-                                  {formatRelativeTime(conv.updatedAt)}
-                                </span>
-                              </div>
-                              <p className="truncate text-[10px] text-muted font-mono mb-1.5">
-                                📁 {conv.cwd}
-                              </p>
-                            </div>
-
-                            {/* Expanded Details */}
-                            {isExpanded && (
-                              <div className="mt-2 pt-2 border-t border-border/60 text-[11px] text-muted space-y-1">
-                                {conv.firstPrompt && (
-                                  <p className="text-text/80 bg-panel2 p-1.5 rounded select-text break-words">
-                                    <span className="font-semibold text-accent">问题：</span>
-                                    {conv.firstPrompt}
-                                  </p>
-                                )}
-                                <div className="flex items-center justify-between text-[10px] pt-1">
-                                  <span>消息数: {conv.messageCount ?? 1} 轮</span>
-                                  <span>ID: {conv.id.slice(0, 8)}...</span>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Actions */}
-                            <div className="mt-2 flex items-center justify-between gap-2 pt-1 border-t border-border/40">
-                              <button
-                                onClick={() => void handleResume(conv)}
-                                className="flex items-center gap-1 rounded bg-accent/15 px-2 py-1 text-[11px] font-semibold text-accent hover:bg-accent/25 active:bg-accent active:text-white transition-colors"
-                              >
-                                <span>🚀</span>
-                                <span>恢复继续聊</span>
-                              </button>
-
-                              <button
-                                onClick={() => void handleDeleteHistory(conv)}
-                                className="flex items-center gap-1 rounded p-1 text-[11px] text-muted hover:text-red-400 hover:bg-red-500/10 active:text-red-400 transition-colors"
-                                title="删除存档"
-                              >
-                                <span>🗑️</span>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-
-          {/* =================================================================== */}
-          {/* SECTION: 系统与偏好设置 (Settings Accordion) */}
+          {/* 2. 统一 AI 历史对话中枢 (Unified Historical Conversations Hub) */}
           {/* =================================================================== */}
           <div className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
             <button
-              onClick={() => toggleSection('settings')}
+              onClick={() => setOpenHistory(!openHistory)}
+              className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-bold text-text hover:bg-panel2/80 active:bg-panel2"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">📚</span>
+                <span>AI 历史对话中枢</span>
+                <span className="rounded-full bg-border px-1.5 py-0.2 text-[10px] font-semibold text-muted">
+                  {conversations.length}
+                </span>
+              </div>
+              <span className="text-xs text-muted">{openHistory ? '▾' : '▸'}</span>
+            </button>
+
+            {openHistory && (
+              <div className="border-t border-border/60 p-2.5 space-y-2">
+                {/* 1. Horizontal Scrollable Filter Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-[11px]">
+                  <button
+                    onClick={() => setActiveCliFilter('all')}
+                    className={`flex-shrink-0 rounded-full px-2.5 py-1 font-semibold border transition-all ${
+                      activeCliFilter === 'all'
+                        ? 'border-accent bg-accent text-white shadow-sm'
+                        : 'border-border bg-panel text-muted hover:text-text'
+                    }`}
+                  >
+                    ★ 全部 ({conversations.length})
+                  </button>
+
+                  {availableClis.map((cli) => {
+                    const count = countsByCli[cli] || 0;
+                    const conf = CLI_CONFIG[cli] || { icon: '🤖', name: cli };
+                    const isSelected = activeCliFilter === cli;
+                    return (
+                      <button
+                        key={cli}
+                        onClick={() => setActiveCliFilter(cli)}
+                        className={`flex-shrink-0 flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold border transition-all ${
+                          isSelected
+                            ? 'border-accent bg-accent text-white shadow-sm'
+                            : 'border-border bg-panel text-muted hover:text-text'
+                        }`}
+                      >
+                        <span>{conf.icon}</span>
+                        <span>{conf.name}</span>
+                        <span className="opacity-80">({count})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 2. Search Box */}
+                {conversations.length > 5 && (
+                  <input
+                    type="text"
+                    placeholder="🔍 搜索对话标题或项目路径..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-panel px-2.5 py-1.5 text-xs text-text placeholder:text-muted/60 focus:border-accent focus:outline-none"
+                  />
+                )}
+
+                {/* 3. Unified Continuous Scrollable Conversation List */}
+                <div className="max-h-[340px] overflow-y-auto space-y-1.5 overscroll-contain pr-0.5">
+                  {filteredConversations.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-muted">
+                      <p>未找到匹配的历史对话</p>
+                    </div>
+                  ) : (
+                    filteredConversations.map((conv) => {
+                      const isExpanded = expandedCardId === `${conv.cli}-${conv.id}`;
+                      const conf = CLI_CONFIG[conv.cli] || {
+                        icon: '🤖',
+                        name: conv.cli,
+                        color: 'text-text bg-panel2 border-border',
+                      };
+
+                      return (
+                        <div
+                          key={`${conv.cli}-${conv.id}`}
+                          className="rounded-lg border border-border bg-panel p-2.5 transition-all text-xs hover:border-accent/40"
+                        >
+                          {/* Top Row: Software Badge + Relative Time */}
+                          <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${conf.color}`}
+                            >
+                              {conf.icon} {conf.name}
+                            </span>
+                            <span className="text-[10px] text-muted font-mono">
+                              {formatRelativeTime(conv.updatedAt)}
+                            </span>
+                          </div>
+
+                          {/* Card Content (Click to expand details) */}
+                          <div
+                            onClick={() =>
+                              setExpandedCardId(isExpanded ? null : `${conv.cli}-${conv.id}`)
+                            }
+                            className="cursor-pointer"
+                          >
+                            <p className="font-semibold text-text leading-snug line-clamp-2 select-text mb-1">
+                              {conv.title}
+                            </p>
+                            <p className="truncate text-[10px] text-muted font-mono">
+                              📁 {conv.cwd}
+                            </p>
+                          </div>
+
+                          {/* Expanded Details */}
+                          {isExpanded && (
+                            <div className="mt-2 pt-2 border-t border-border/60 text-[11px] text-muted space-y-1">
+                              {conv.firstPrompt && (
+                                <p className="text-text/90 bg-panel2 p-1.5 rounded select-text break-words leading-relaxed">
+                                  <span className="font-semibold text-accent">提问内容：</span>
+                                  {conv.firstPrompt}
+                                </p>
+                              )}
+                              <div className="flex items-center justify-between text-[10px] pt-1 font-mono">
+                                <span>消息数: {conv.messageCount ?? 1} 轮</span>
+                                <span>ID: {conv.id.slice(0, 10)}...</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Bottom Action Buttons */}
+                          <div className="mt-2 flex items-center justify-between gap-2 pt-1.5 border-t border-border/40">
+                            <button
+                              onClick={() => void handleResume(conv)}
+                              className="flex items-center gap-1 rounded bg-accent/15 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent/25 active:bg-accent active:text-white transition-colors"
+                            >
+                              <span>🚀</span>
+                              <span>恢复继续聊</span>
+                            </button>
+
+                            <button
+                              onClick={() => void handleDeleteHistory(conv)}
+                              className="flex items-center gap-1 rounded p-1 text-[11px] text-muted hover:text-red-400 hover:bg-red-500/10 active:text-red-400 transition-colors"
+                              title="删除此存档"
+                            >
+                              <span>🗑️</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* =================================================================== */}
+          {/* 3. 系统与偏好设置 (Settings Accordion) */}
+          {/* =================================================================== */}
+          <div className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
+            <button
+              onClick={() => setOpenSettings(!openSettings)}
               className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-bold text-text hover:bg-panel2/80 active:bg-panel2"
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm">⚙️</span>
                 <span>系统与偏好设置</span>
               </div>
-              <span className="text-xs text-muted">
-                {openSections['settings'] ? '▾' : '▸'}
-              </span>
+              <span className="text-xs text-muted">{openSettings ? '▾' : '▸'}</span>
             </button>
 
-            {openSections['settings'] && (
+            {openSettings && (
               <div className="border-t border-border/60 p-3 space-y-3 text-xs">
                 {/* 跟随输出 */}
                 <label className="flex items-center justify-between cursor-pointer">
@@ -377,7 +440,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                 </label>
 
                 {/* 状态与字体说明 */}
-                <div className="pt-2 border-t border-border/40 text-[10px] text-muted space-y-1">
+                <div className="pt-2 border-t border-border/40 text-[10px] text-muted space-y-1 font-mono">
                   <p>• 字体栈：JetBrains Mono / Roboto Mono</p>
                   <p>• 物理安全边距：10px（自动防切）</p>
                   <p>• 模式：局域网开放 (0.0.0.0)</p>
