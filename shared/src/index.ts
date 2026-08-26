@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Known CLI kinds. `shell` is always available (user's own shell). */
-export const CliId = z.enum(['shell', 'claude', 'opencode', 'codex', 'openclaw', 'hermes']);
+export const CliId = z.enum(['shell', 'agy', 'pi', 'claude', 'opencode', 'codex', 'openclaw', 'hermes']);
 export type CliId = z.infer<typeof CliId>;
 
 export interface CliInfo {
@@ -17,11 +17,15 @@ export interface SessionInfo {
   kind: CliId;
   cwd: string;
   createdAt: number;
+  status?: 'running' | 'exited';
+  exitCode?: number;
+  args?: string[];
 }
 
 // ---- WebSocket: client → server -------------------------------------------
 
 export const ClientMessage = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('ping') }),
   z.object({ type: z.literal('attach'), sessionId: z.string() }),
   z.object({ type: z.literal('detach'), sessionId: z.string() }),
   z.object({ type: z.literal('input'), sessionId: z.string(), data: z.string() }),
@@ -37,6 +41,7 @@ export type ClientMessage = z.infer<typeof ClientMessage>;
 // ---- WebSocket: server → client -------------------------------------------
 
 export type ServerMessage =
+  | { type: 'pong' }
   | { type: 'attached'; sessionId: string; cols: number; rows: number }
   | { type: 'output'; sessionId: string; data: string }
   | { type: 'exit'; sessionId: string; exitCode: number }
@@ -45,9 +50,12 @@ export type ServerMessage =
 export interface CreateSessionBody {
   kind: CliId;
   cwd?: string;
+  args?: string[];
+  env?: Record<string, string>;
 }
 
 export interface ProjectInfo {
   name: string;
   path: string;
 }
+

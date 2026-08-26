@@ -64,4 +64,24 @@ describe('SessionManager', () => {
   it('rejects writes to unknown sessions', () => {
     expect(manager.write('nope', 'x')).toBe(false);
   });
+
+  it('supports custom environment variables and arguments', async () => {
+    const info = manager.create('shell', cwd, undefined, { TEST_VAR_ABC: 'custom_value_123' });
+    spawned.push(info.id);
+    let got = '';
+    const off = manager.onOutput(info.id, (d) => (got += d));
+    manager.write(info.id, 'echo "VAR=$TEST_VAR_ABC"\r');
+    await new Promise((r) => setTimeout(r, 600));
+    off();
+    expect(got).toContain('VAR=custom_value_123');
+  });
+
+  it('stores and retrieves snapshot buffer', async () => {
+    const info = makeShell();
+    manager.write(info.id, 'echo snapshot_check_456\r');
+    await new Promise((r) => setTimeout(r, 600));
+    const snap = manager.snapshot(info.id);
+    expect(snap).toContain('snapshot_check_456');
+  });
 });
+

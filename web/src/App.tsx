@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { deckSocket } from './lib/ws.js';
 import { useDeck } from './store.js';
 import TermView from './views/TermView';
+import FocusBar from './components/FocusBar';
 import QuickKeyboard from './components/QuickKeyboard';
+
 import SessionTabs from './components/SessionTabs';
 import NewSessionDialog from './components/NewSessionDialog';
 import Drawer from './components/Drawer';
@@ -15,6 +17,8 @@ export default function App() {
   const loadClis = useDeck((s) => s.loadClis);
   const keyboardVisible = useDeck((s) => s.keyboardVisible);
   const toggleKeyboard = useDeck((s) => s.toggleKeyboard);
+  const focusBarEnabled = useDeck((s) => s.focusBarEnabled);
+  const toggleFocusBar = useDeck((s) => s.toggleFocusBar);
   const [showNew, setShowNew] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
@@ -33,7 +37,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       {/* Top bar */}
-      <header className="flex items-center gap-2 border-b border-border bg-panel px-3 py-2">
+      <header className="flex items-center gap-1.5 border-b border-border bg-panel px-2.5 py-2">
         <button
           onClick={() => setDrawerOpen(true)}
           className="rounded-lg px-1.5 py-1 text-base leading-none text-muted active:text-text"
@@ -49,17 +53,38 @@ export default function App() {
         />
         <span className="text-sm font-bold tracking-wide text-accent">▚ Termux WebUI</span>
         {active && <span className="rounded bg-panel2 px-1.5 py-0.5 text-[10px] text-muted">{active.kind}</span>}
-        <button
-          onClick={() => setShowNew(true)}
-          className="ml-auto rounded-lg border border-border bg-panel2 px-2.5 py-1 text-sm active:border-accent"
-        >
-          ⊕ 新建
-        </button>
-        {active && keyboardVisible === false && (
-          <button onClick={() => toggleKeyboard(true)} className="rounded-lg border border-border px-2 py-1 text-xs text-muted active:text-text">
-            ⌨︎
+
+        <div className="ml-auto flex items-center gap-1.5">
+          {active && (
+            <button
+              onClick={() => toggleFocusBar()}
+              title={focusBarEnabled ? '隐藏选项联动释义条' : '开启选项联动释义条 (0毫秒秒出中文)'}
+              className={`rounded-lg border px-2 py-1 text-xs transition-colors ${
+                focusBarEnabled
+                  ? 'border-accent bg-accent/15 text-accent font-medium'
+                  : 'border-border text-muted hover:text-text active:text-text'
+              }`}
+            >
+              💡 释义
+            </button>
+          )}
+          <button
+            onClick={() => setShowNew(true)}
+            className="rounded-lg border border-border bg-panel2 px-2.5 py-1 text-sm active:border-accent"
+          >
+            ⊕ 新建
           </button>
-        )}
+
+          {active && keyboardVisible === false && (
+            <button
+              onClick={() => toggleKeyboard(true)}
+              className="rounded-lg border border-border px-2 py-1 text-xs text-muted active:text-text"
+              title="显示快捷键盘"
+            >
+              ⌨︎
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Content: all terminals mounted, only the active one visible */}
@@ -79,12 +104,18 @@ export default function App() {
         )}
       </main>
 
+      {/* Focus & Option Explanation Bar */}
+      {active && <FocusBar sessionId={active.id} />}
+
       {/* Keyboard + tabs */}
       {keyboardVisible && active && <QuickKeyboard sessionId={active.id} onHide={() => toggleKeyboard(false)} />}
       <SessionTabs />
+
 
       {showNew && <NewSessionDialog onClose={() => setShowNew(false)} />}
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 }
+
+

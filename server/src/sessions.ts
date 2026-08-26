@@ -27,12 +27,13 @@ export class SessionManager {
   private buffers = new Map<string, string>();
   private static MAX_BUFFER = 128 * 1024;
 
-  create(kind: CliId, cwd?: string): SessionInfo {
+  create(kind: CliId, cwd?: string, extraArgs?: string[], extraEnv?: Record<string, string>): SessionInfo {
     const id = randomUUID();
     const dir = resolveCwd(cwd);
-    const { file, args } = commandFor(kind);
+    const { file, args } = commandFor(kind, extraArgs);
     const env = {
       ...process.env,
+      ...(extraEnv ?? {}),
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       // Let TUIs know the host so paste/links behave.
@@ -45,19 +46,29 @@ export class SessionManager {
       cwd: dir,
       env,
     });
-    const session: Session = { id, kind, cwd: dir, createdAt: Date.now(), pty };
+    const session: Session = {
+      id,
+      kind,
+      cwd: dir,
+      createdAt: Date.now(),
+      status: 'running',
+      args: extraArgs && extraArgs.length > 0 ? extraArgs : undefined,
+      pty,
+    };
     this.sessions.set(id, session);
     this.buffers.set(id, '');
 
     pty.onData((data) => {
-      const buf = (this.buffers.get(id) ?? '') + data;
-      this.buffers.set(
-        id,
-        buf.length > SessionManager.MAX_BUFFER ? buf.slice(-SessionManager.MAX_BUFFER) : buf,
-      );
+      let buf = (this.buffers.get(id) ?? '') + data;
+      if (buf.length > SessionManager.MAX_BUFFER * 1.5) {
+        buf = buf.slice(-SessionManager.MAX_BUFFER);
+      }
+      this.buffers.set(id, buf);
       for (const fn of this.listeners.get(id) ?? []) fn(data);
     });
     pty.onExit(({ exitCode }) => {
+      session.status = 'exited';
+      session.exitCode = exitCode;
       for (const fn of this.exitListeners.get(id) ?? []) fn(exitCode);
       this.cleanup(id);
     });

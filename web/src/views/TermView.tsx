@@ -4,6 +4,10 @@ import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
+import { registerTerminal, unregisterTerminal } from '../lib/instances.js';
+import { extractActiveLine } from '../lib/simpleDetector.js';
+
+
 
 const DARK = {
   background: '#0b0d10',
@@ -57,6 +61,7 @@ async function copyText(text: string): Promise<boolean> {
 export default function TermView({ sessionId, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  const [termInstance, setTermInstance] = useState<Terminal | null>(null);
   const [handles, setHandles] = useState<{ a: Cell; b: Cell } | null>(null);
   const [showBar, setShowBar] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -67,6 +72,7 @@ export default function TermView({ sessionId, active }: Props) {
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
   const rightReservePct = useDeck((s) => s.rightReservePct);
+  const followRefs = new Map<string, { current: boolean }>();
 
   // Create once per session.
   useEffect(() => {
@@ -74,73 +80,86 @@ export default function TermView({ sessionId, active }: Props) {
     if (!host) return;
     const term = new Terminal({
       theme: DARK,
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       fontSize: 13,
-      fontFamily: '"JetBrains Mono", Menlo, Consolas, monospace',
-      scrollSensitivity: 3,
-      fastScrollSensitivity: 8,
+      lineHeight: 1.25,
+      cursorBlink: true,
+      cursorStyle: 'block',
+      scrollback: 5000,
+      allowTransparency: true,
+      macOptionIsMeta: true,
+      rightClickSelectsWord: false,
     });
+    termRef.current = term;
+    setTermInstance(term);
+    registerTerminal(sessionId, term);
+
+
+
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(host);
-    termRef.current = term;
-    term.onData((data) => deckSocket.send({ type: 'input', sessionId, data }));
 
     const fitNow = () => {
-      try {
+      if (host.clientWidth > 0 && host.clientHeight > 0) {
         fit.fit();
-        if (term.cols >= 2 && term.rows >= 2) {
-          // User-controlled right reserve: shave a percentage of the columns
-          // so long lines end early instead of clipping glyphs at the edge.
-          const pct = useDeck.getState().rightReservePct / 100;
-          const target = pct > 0 ? Math.max(2, Math.floor(term.cols * (1 - pct))) : term.cols;
-          if (target !== term.cols) term.resize(target, term.rows);
-          deckSocket.send({ type: 'resize', sessionId, cols: term.cols, rows: term.rows });
-        }
-      } catch {
-        /* container hidden or zero-size */
+        deckSocket.send({ type: 'resize', sessionId, cols: term.cols, rows: term.rows });
       }
     };
     fitFns.set(sessionId, fitNow);
     fitNow();
 
-    // ---- follow output -----------------------------------------------------
     const followRef = { current: followOutput };
     followRefs.set(sessionId, followRef);
     term.onScroll(() => {
       if (!useDeck.getState().followOutput) {
-        followRef.current = false; // user turned follow off — respect it
+        followRef.current = false;
         return;
       }
       const buf = term.buffer.active;
-      // Rejoin follow when the user scrolls back near the bottom; leaving the
-      // bottom (any manual scroll) releases it.
       followRef.current = buf.baseY - buf.viewportY <= 1;
     });
+
+    const syncFocus = () => {
+      if (useDeck.getState().activeId === sessionId) {
+        const focus = extractActiveLine(term);
+        useDeck.getState().setActiveFocus(focus);
+      }
+    };
+
+    term.onRender(syncFocus);
+    term.onScroll(syncFocus);
+    term.onData((data) => {
+      deckSocket.send({ type: 'input', sessionId, data });
+      setTimeout(syncFocus, 30);
+    });
+
 
     // While selecting, incoming output is parked and flushed after the
     // selection ends — the screen must stay frozen under the user's handles.
     let selecting = false;
     let parked: string[] = [];
-    /** Finger travel since the long-press fired; below this threshold the
-     * selection is not updated, so natural hand tremor never collapses the
-     * freshly created 3-row selection back to the press point. */
     let selectMoveOrigin: { x: number; y: number } | null = null;
     const SELECT_MOVE_THRESHOLD = 18;
 
     const off = deckSocket.onMessage((msg) => {
       if (msg.type === 'output' && msg.sessionId === sessionId) {
+
         if (selecting) {
           parked.push(msg.data);
           return;
         }
         term.write(msg.data, () => {
           if (followRefs.get(sessionId)?.current) term.scrollToBottom();
+          syncFocus();
         });
       }
       if (msg.type === 'exit' && msg.sessionId === sessionId) {
         term.write(`\r\n\x1b[33m[会话已退出 code=${msg.exitCode}]\x1b[0m\r\n`);
       }
     });
+
+
 
     // ---- long-press selection ---------------------------------------------
     const LONG_PRESS_MS = 400; // native-app standard; 250ms fires mid-scroll-start
@@ -395,13 +414,17 @@ export default function TermView({ sessionId, active }: Props) {
       if (pressTimer) clearTimeout(pressTimer);
       stopDragScroll();
       host.removeEventListener('touchstart', onHostTouchStart, true);
+
+
       host.removeEventListener('touchmove', onHostTouchMove, true);
       host.removeEventListener('touchend', onHostTouchEnd, true);
       host.removeEventListener('touchcancel', onHostTouchEnd, true);
       fitFns.delete(sessionId);
       followRefs.delete(sessionId);
+      unregisterTerminal(sessionId);
       term.dispose();
     };
+
     // followOutput intentionally not a dep: followRef is synced below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -463,14 +486,18 @@ export default function TermView({ sessionId, active }: Props) {
     }
   }, [suppressKeyboard, sessionId, active]);
 
-  // Hide/show on tab switch; refit when becoming visible (geometry may have
-  // changed while hidden).
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     host.style.visibility = active ? 'visible' : 'hidden';
-    if (active) requestAnimationFrame(() => fitFns.get(sessionId)?.());
+    if (active) {
+      requestAnimationFrame(() => fitFns.get(sessionId)?.());
+      if (termRef.current) {
+        useDeck.getState().setActiveFocus(extractActiveLine(termRef.current));
+      }
+    }
   }, [active, sessionId]);
+
 
   // Live-apply the right-reserve setting: refit every terminal immediately,
   // no reload needed.
@@ -541,6 +568,9 @@ export default function TermView({ sessionId, active }: Props) {
       )}
     </div>
   );
+
+
+
 }
 
 /** sessionId → live follow flag shared between the store toggle and the

@@ -8,6 +8,7 @@ import { CliId, ClientMessage, type CreateSessionBody, type ServerMessage } from
 import { listClis } from './clis.js';
 import { listProjects } from './projects.js';
 import { SessionManager } from './sessions.js';
+import { performTranslation, type TranslateParams } from './translate.js';
 
 const PORT = Number(process.env.PORT || 4150);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -23,11 +24,50 @@ app.get('/api/clis', (c) => c.json(listClis()));
 app.get('/api/projects', (c) => c.json(listProjects()));
 app.get('/api/sessions', (c) => c.json(manager.list()));
 
+app.post('/api/translate', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    text?: string;
+    engine?: TranslateParams['engine'];
+    aiConfig?: { apiUrl?: string; apiKey?: string; model?: string };
+    customUrl?: string;
+  };
+  const text = typeof body?.text === 'string' ? body.text : '';
+  if (!text.trim()) return c.json({ ok: true, result: '', source: 'none' });
+
+  const engine = body.engine || 'auto';
+  try {
+    const { text: result, source } = await performTranslation(text, {
+      engine,
+      aiApiUrl: body.aiConfig?.apiUrl,
+      aiApiKey: body.aiConfig?.apiKey,
+      aiModel: body.aiConfig?.model,
+      customApiUrl: body.customUrl,
+    });
+    return c.json({ ok: true, result, source });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ ok: false, error: message }, 500);
+  }
+});
+
+
+
 app.post('/api/sessions', async (c) => {
   const body = (await c.req.json().catch(() => null)) as CreateSessionBody | null;
   const kind = CliId.safeParse(body?.kind);
   if (!kind.success) return c.json({ error: 'invalid kind' }, 400);
-  return c.json(manager.create(kind.data, body?.cwd), 201);
+
+  const args = Array.isArray(body?.args)
+    ? body.args.filter((x): x is string => typeof x === 'string' && x.length > 0)
+    : undefined;
+  const env =
+    body?.env && typeof body.env === 'object' && !Array.isArray(body.env)
+      ? Object.fromEntries(
+          Object.entries(body.env).filter(([k, v]) => typeof k === 'string' && typeof v === 'string'),
+        )
+      : undefined;
+
+  return c.json(manager.create(kind.data, body?.cwd, args, env), 201);
 });
 
 app.delete('/api/sessions/:id', (c) => {
@@ -68,7 +108,11 @@ app.get('*', (c) => {
 
 // --- WebSocket ----------------------------------------------------------------
 
-const sockets = new Set<WebSocket>();
+interface HeartbeatWebSocket extends WebSocket {
+  isAlive?: boolean;
+}
+
+const sockets = new Set<HeartbeatWebSocket>();
 /** sessionId → attached sockets */
 const attached = new Map<string, Set<WebSocket>>();
 const unsubs = new Map<string, () => void>();
@@ -78,7 +122,8 @@ function send(socket: WebSocket, msg: ServerMessage) {
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(msg));
 }
 
-function handleClient(socket: WebSocket, raw: string) {
+function handleClient(socket: HeartbeatWebSocket, raw: string) {
+  socket.isAlive = true;
   let parsedJson: unknown;
   try {
     parsedJson = JSON.parse(raw.toString());
@@ -93,6 +138,9 @@ function handleClient(socket: WebSocket, raw: string) {
   }
   const msg = parsed.data;
   switch (msg.type) {
+    case 'ping':
+      send(socket, { type: 'pong' });
+      break;
     case 'attach': {
       const session = manager.get(msg.sessionId);
       if (!session) {
@@ -151,8 +199,12 @@ function handleClient(socket: WebSocket, raw: string) {
 }
 
 const wss = new WebSocketServer({ noServer: true });
-wss.on('connection', (socket) => {
+wss.on('connection', (socket: HeartbeatWebSocket) => {
+  socket.isAlive = true;
   sockets.add(socket);
+  socket.on('pong', () => {
+    socket.isAlive = true;
+  });
   socket.on('message', (raw) => handleClient(socket, raw as Buffer));
   socket.on('close', () => {
     sockets.delete(socket);
@@ -161,6 +213,19 @@ wss.on('connection', (socket) => {
     for (const set of attached.values()) set.delete(socket);
   });
 });
+
+const heartbeatInterval = setInterval(() => {
+  for (const socket of sockets) {
+    if (socket.isAlive === false) {
+      socket.terminate();
+      continue;
+    }
+    socket.isAlive = false;
+    socket.ping();
+  }
+}, 30000);
+
+heartbeatInterval.unref();
 
 // --- Boot ----------------------------------------------------------------------
 
@@ -171,3 +236,4 @@ server.on('upgrade', (req, socket, head) => {
   if (new URL(req.url ?? '/', 'http://localhost').pathname !== '/ws') return socket.destroy();
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
+

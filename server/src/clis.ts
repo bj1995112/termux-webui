@@ -3,6 +3,8 @@ import type { CliId, CliInfo } from '@termux-webui/shared';
 
 const REGISTRY: Array<{ id: CliId; label: string; bin: string }> = [
   { id: 'shell', label: '终端', bin: '' },
+  { id: 'agy', label: 'Antigravity', bin: 'agy' },
+  { id: 'pi', label: 'Pi', bin: 'pi' },
   { id: 'claude', label: 'Claude Code', bin: 'claude' },
   { id: 'opencode', label: 'OpenCode', bin: 'opencode' },
   { id: 'codex', label: 'Codex', bin: 'codex' },
@@ -26,14 +28,16 @@ export function listClis(): CliInfo[] {
 
 /** Spawn argv for a kind. Shell uses the user's login shell; agents run bare
  * so their own TUI/REPL drives the session. */
-export function commandFor(kind: CliId): { file: string; args: string[] } {
+export function commandFor(kind: CliId, extraArgs?: string[]): { file: string; args: string[] } {
+  const custom = (extraArgs ?? []).filter(Boolean);
   if (kind === 'shell') {
     const shell = process.env.SHELL || '/bin/bash';
-    return { file: shell, args: ['-l'] };
+    return { file: shell, args: custom.length > 0 ? ['-l', ...custom] : ['-l'] };
   }
   const info = REGISTRY.find((r) => r.id === kind)!;
   // Resolve through the login shell so npx-installed CLIs on custom paths work.
   const res = spawnSync('which', [info.bin], { encoding: 'utf8' });
   const path = res.status === 0 ? res.stdout.trim() : info.bin;
-  return { file: path || info.bin, args: [] };
+  return { file: path || info.bin, args: custom };
 }
+
