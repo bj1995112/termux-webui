@@ -1,11 +1,22 @@
 import { useState } from 'react';
 import { useDeck } from '../store.js';
 
-export default function Drawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  onNewSession: () => void;
+}
+
+export default function Drawer({ open, onClose, onNewSession }: Props) {
   const [page, setPage] = useState<'main' | 'settings'>('main');
   const [openSection, setOpenSection] = useState<'terminal' | 'theme' | 'security' | null>('terminal');
 
-  // Terminal state
+  const sessions = useDeck((s) => s.sessions);
+  const activeId = useDeck((s) => s.activeId);
+  const setActive = useDeck((s) => s.setActive);
+  const killSession = useDeck((s) => s.killSession);
+
+  // Terminal preferences
   const followOutput = useDeck((s) => s.followOutput);
   const toggleFollowOutput = useDeck((s) => s.toggleFollowOutput);
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
@@ -14,6 +25,16 @@ export default function Drawer({ open, onClose }: { open: boolean; onClose: () =
   const close = () => {
     onClose();
     window.setTimeout(() => setPage('main'), 250);
+  };
+
+  const selectSession = (id: string) => {
+    setActive(id);
+    close();
+  };
+
+  const handleNewSession = () => {
+    close();
+    window.setTimeout(onNewSession, 150);
   };
 
   const toggleSection = (sec: 'terminal' | 'theme' | 'security') => {
@@ -35,24 +56,101 @@ export default function Drawer({ open, onClose }: { open: boolean; onClose: () =
       >
         {page === 'main' ? (
           <>
-            <div className="border-b border-border px-4 pb-3 pt-5">
-              <p className="text-base font-bold text-accent">▚ Termux WebUI</p>
-              <p className="mt-0.5 text-xs text-muted">通用 Agent 控制台 · 手机优先</p>
-            </div>
-            <nav className="flex-1 overflow-y-auto py-2">
-              <div className="px-4 py-2 text-xs text-muted space-y-1.5">
-                <p className="font-semibold text-text">💡 快速提示：</p>
-                <p>• 长按终端屏幕可自由划选文本并快速复制。</p>
-                <p>• 点击右上角 ⊕ 随时开启多个独立终端会话。</p>
-                <p>• 底部快捷键盘支持一键按键盲操。</p>
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between border-b border-border px-4 pb-3.5 pt-5">
+              <div>
+                <p className="text-base font-bold text-accent">▚ Termux WebUI</p>
+                <p className="text-xs text-muted">多会话控制中心</p>
               </div>
-            </nav>
+              <button
+                onClick={handleNewSession}
+                className="flex items-center gap-1 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm active:bg-accent/80"
+              >
+                <span>⊕</span>
+                <span>新建</span>
+              </button>
+            </div>
+
+            {/* Session List */}
+            <div className="flex-1 overflow-y-auto p-3">
+              <div className="flex items-center justify-between px-1 mb-2">
+                <span className="text-[11px] font-bold text-muted tracking-wider uppercase">
+                  终端会话 ({sessions.length})
+                </span>
+                <span className="text-[10px] text-muted">点击切换</span>
+              </div>
+
+              {sessions.length === 0 ? (
+                <div className="py-8 text-center text-xs text-muted border border-dashed border-border rounded-xl">
+                  <p>暂无活跃终端</p>
+                  <button
+                    onClick={handleNewSession}
+                    className="mt-2 text-accent underline underline-offset-2"
+                  >
+                    点击新建一个
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {sessions.map((s, idx) => {
+                    const isCur = s.id === activeId;
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => selectSession(s.id)}
+                        className={`group flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 transition-colors cursor-pointer ${
+                          isCur
+                            ? 'border-accent bg-accent/15 shadow-sm'
+                            : 'border-border bg-panel2/60 hover:bg-panel2 active:bg-panel2'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 overflow-hidden">
+                          <span
+                            className={`h-2 w-2 flex-shrink-0 rounded-full ${
+                              isCur ? 'bg-accent animate-pulse' : 'bg-emerald-400'
+                            }`}
+                          />
+                          <div className="overflow-hidden">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-semibold text-text">
+                                #{idx + 1} {s.kind}
+                              </span>
+                              {isCur && (
+                                <span className="rounded bg-accent/20 px-1 py-0.2 text-[9px] font-bold text-accent">
+                                  当前
+                                </span>
+                              )}
+                            </div>
+                            <p className="truncate text-[10px] text-muted font-mono">
+                              {s.cwd || '~'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void killSession(s.id);
+                          }}
+                          className="flex-shrink-0 rounded-md p-1.5 text-muted hover:text-red-400 hover:bg-red-500/10 active:text-red-400"
+                          title="关闭会话"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Bottom: Settings Nav Button */}
             <button
               onClick={() => setPage('settings')}
-              className="flex items-center gap-3 border-t border-border px-4 py-4 text-left text-sm active:bg-panel2"
+              className="flex items-center gap-3 border-t border-border bg-panel2/30 px-4 py-3.5 text-left text-sm active:bg-panel2"
             >
-              <span className="text-lg leading-none">⚙️</span>
-              <span className="font-medium">系统与偏好设置</span>
+              <span className="text-base leading-none">⚙️</span>
+              <span className="font-medium text-text">系统与偏好设置</span>
               <span className="ml-auto text-muted">›</span>
             </button>
           </>
@@ -114,7 +212,7 @@ export default function Drawer({ open, onClose }: { open: boolean; onClose: () =
                 )}
               </div>
 
-              {/* 2. 主题与外观 (预留) */}
+              {/* 2. 主题与外观 */}
               <div className="rounded-xl border border-border bg-panel2/50 overflow-hidden">
                 <button
                   onClick={() => toggleSection('theme')}
@@ -130,12 +228,12 @@ export default function Drawer({ open, onClose }: { open: boolean; onClose: () =
                 {openSection === 'theme' && (
                   <div className="border-t border-border/60 p-3.5 text-xs text-muted space-y-2">
                     <p>• 当前字体栈：JetBrains Mono / Roboto Mono</p>
-                    <p>• 自动硬件级安全边距已激活（防裁切）</p>
+                    <p>• 自动物理网格安全边距已激活（防裁切）</p>
                   </div>
                 )}
               </div>
 
-              {/* 3. 安全与局域网认证 (预留) */}
+              {/* 3. 安全与局域网认证 */}
               <div className="rounded-xl border border-border bg-panel2/50 overflow-hidden">
                 <button
                   onClick={() => toggleSection('security')}
