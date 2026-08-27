@@ -128,6 +128,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [testingApi, setTestingApi] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -738,6 +739,46 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                           }
                           className="w-full rounded border border-border bg-panel px-2 py-1 text-[11px] text-text font-mono focus:border-accent focus:outline-none"
                         />
+                      </div>
+
+                      <div className="pt-1 flex items-center justify-end">
+                        <button
+                          type="button"
+                          disabled={testingApi}
+                          onClick={async () => {
+                            setTestingApi(true);
+                            showToast('正在测试 API 连通性...', 'info');
+                            try {
+                              const token = localStorage.getItem('twui.token');
+                              const res = await fetch('/api/translate', {
+                                method: 'POST',
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  Authorization: `Bearer ${token}`,
+                                },
+                                body: JSON.stringify({
+                                  text: 'Hello from Termux WebUI',
+                                  to: 'zh-CN',
+                                  config: translationConfig,
+                                }),
+                              });
+                              const data = await res.json();
+                              if (data.ok && data.translated) {
+                                showToast(`✅ API 测试通过！响应: ${data.translated}`, 'success');
+                              } else {
+                                showToast(`❌ API 测试失败: ${data.error || '无法获取响应'}`, 'error');
+                              }
+                            } catch (e) {
+                              showToast(`❌ 请求异常: ${e instanceof Error ? e.message : String(e)}`, 'error');
+                            } finally {
+                              setTestingApi(false);
+                            }
+                          }}
+                          className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1 text-[11px] font-semibold text-white active:scale-95 transition-all disabled:opacity-50"
+                        >
+                          <span>{testingApi ? '⏳' : '🧪'}</span>
+                          <span>{testingApi ? '测试中...' : '测试 API 连通性'}</span>
+                        </button>
                       </div>
                     </div>
                   )}

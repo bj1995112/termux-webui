@@ -19,6 +19,7 @@ export default function TranslationOverlay({ term, onClose }: Props) {
   const [expandedLine, setExpandedLine] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const translateText = useDeck((s) => s.translateText);
+  const fontSize = useDeck((s) => s.fontSize);
   const overlayRef = useRef<HTMLDivElement>(null);
 
   const captureAndTranslate = async () => {
@@ -72,20 +73,21 @@ export default function TranslationOverlay({ term, onClose }: Props) {
 
   useEffect(() => {
     void captureAndTranslate();
-  }, [term]);
+  }, [term, fontSize]);
 
   if (!term) return null;
 
   return (
     <div
       ref={overlayRef}
-      className="absolute inset-0 z-30 flex flex-col overflow-hidden bg-panel/85 backdrop-blur-md font-mono text-[13px] leading-[1.25] text-text select-text transition-opacity duration-200"
+      style={{ fontSize: `${fontSize}px` }}
+      className="absolute inset-0 z-30 flex flex-col overflow-hidden bg-panel/90 backdrop-blur-md font-mono leading-[1.25] text-text select-text transition-opacity duration-200"
     >
       {/* Top Floating Control Capsule */}
       <div className="sticky top-2 z-40 mx-auto flex items-center gap-2 rounded-xl border border-accent/40 bg-panel2/95 px-3 py-1.5 text-xs shadow-2xl backdrop-blur-md animate-in slide-in-from-top-2">
         <div className="flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-full bg-accent animate-pulse" />
-          <span className="font-bold text-accent">🌐 终端原位翻译层</span>
+          <span className="font-bold text-accent">🌐 终端原位翻译 ({fontSize}px)</span>
         </div>
         <div className="h-3 w-px bg-border/60 mx-1" />
         <button
@@ -116,7 +118,8 @@ export default function TranslationOverlay({ term, onClose }: Props) {
             <div
               key={l.lineIndex}
               onClick={() => setExpandedLine(isExpanded ? null : l.lineIndex)}
-              className={`group relative min-h-[16.25px] whitespace-pre-wrap break-words rounded px-1.5 transition-colors cursor-pointer ${
+              style={{ minHeight: `${Math.round(fontSize * 1.25)}px` }}
+              className={`group relative whitespace-pre-wrap break-words rounded px-1.5 transition-colors cursor-pointer ${
                 isBlank ? 'opacity-20' : 'hover:bg-accent/10 active:bg-accent/20'
               } ${isExpanded ? 'bg-panel2/90 ring-1 ring-accent/40' : ''}`}
             >
@@ -139,13 +142,13 @@ export default function TranslationOverlay({ term, onClose }: Props) {
                     <span className="text-[10px] font-bold text-muted block">
                       🇺🇸 原文 (English):
                     </span>
-                    <p className="font-mono text-muted text-[12px]">{l.original}</p>
+                    <p className="font-mono text-muted" style={{ fontSize: `${fontSize}px` }}>{l.original}</p>
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-accent block">
                       🇨🇳 译文 (Chinese):
                     </span>
-                    <p className="font-mono text-text text-[12px]">{l.translated}</p>
+                    <p className="font-mono text-text" style={{ fontSize: `${fontSize}px` }}>{l.translated}</p>
                   </div>
                 </div>
               )}

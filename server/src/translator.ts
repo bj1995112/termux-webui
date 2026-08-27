@@ -26,10 +26,10 @@ const LOCAL_TERMS: Record<string, string> = {
   'debug': '调试',
 
   // Common Linux Errors & Messages
-  'permission denied': '权限被拒绝 (请尝试使用 sudo 或检查文件权限)',
+  'permission denied': '权限被拒绝 (请检查文件读写执行权限或使用 sudo/su)',
   'file not found': '文件未找到',
   'no such file or directory': '没有该文件或目录',
-  'command not found': '未找到命令 (请检查是否已安装该软件包)',
+  'command not found': '未找到该命令 (请检查拼写或使用 apt install 安装)',
   'cannot find module': '找不到指定的模块',
   'syntaxerror: unexpected token': '语法错误：意外的标记',
   'syntax error': '语法错误',
@@ -110,7 +110,7 @@ function getCacheKey(text: string, toLang: string, config?: TranslationConfig): 
 }
 
 /** Fetch with timeout wrapper */
-async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 2500): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 3000): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -121,16 +121,49 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 2
   }
 }
 
-/** Source 1: Youdao Dictionary Suggest API (100% stable & zero-block in China) */
-async function translateWithYoudao(text: string): Promise<{ translated: string; fromLang: string }> {
-  const url = `https://dict.youdao.com/suggest?num=1&doctype=json&q=${encodeURIComponent(text.slice(0, 100))}`;
-  const res = await fetchWithTimeout(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
-    },
-  }, 2000);
+/** Source 1: Youdao Mobile Full Sentence Translation (100% available without VPN) */
+async function translateWithYoudaoMobile(text: string): Promise<{ translated: string; fromLang: string }> {
+  const form = new URLSearchParams();
+  form.append('inputtext', text);
+  form.append('type', 'AUTO');
 
-  if (!res.ok) throw new Error(`Youdao returned HTTP ${res.status}`);
+  const res = await fetchWithTimeout(
+    'https://m.youdao.com/translate',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+      },
+      body: form,
+    },
+    2500,
+  );
+
+  if (!res.ok) throw new Error(`Youdao Mobile returned HTTP ${res.status}`);
+  const html = await res.text();
+  const match = /<ul id="translateResult">[\s\S]*?<li>([\s\S]*?)<\/li>/.exec(html);
+  if (match && match[1]?.trim()) {
+    return { translated: match[1].trim(), fromLang: 'auto' };
+  }
+  throw new Error('Youdao Mobile did not match result');
+}
+
+/** Source 2: Youdao Dictionary Word/Phrase Suggest API (Fast Domestic Term Lookup) */
+async function translateWithYoudaoSuggest(text: string): Promise<{ translated: string; fromLang: string }> {
+  const url = `https://dict.youdao.com/suggest?num=1&doctype=json&q=${encodeURIComponent(text.slice(0, 100))}`;
+  const res = await fetchWithTimeout(
+    url,
+    {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+      },
+    },
+    1500,
+  );
+
+  if (!res.ok) throw new Error(`Youdao suggest returned HTTP ${res.status}`);
   const data = (await res.json()) as {
     result?: { code?: number };
     data?: { entries?: { explain?: string; entry?: string }[] };
@@ -145,18 +178,23 @@ async function translateWithYoudao(text: string): Promise<{ translated: string; 
   throw new Error('Youdao suggest did not find matching term');
 }
 
-/** Source 2: Google Translate Public RPC (Fallback if VPN/Proxy active) */
+/** Source 3: Google Translate Public RPC (Fallback if proxy active) */
 async function translateWithGoogle(text: string, toLang = 'zh-CN'): Promise<{ translated: string; fromLang: string }> {
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(toLang)}&dt=t&q=${encodeURIComponent(text)}`;
-  const res = await fetchWithTimeout(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+  const res = await fetchWithTimeout(
+    url,
+    {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      },
     },
-  }, 2000);
+    2000,
+  );
 
   if (!res.ok) throw new Error(`Google translate returned HTTP ${res.status}`);
   const data = (await res.json()) as unknown[];
-  
+
   if (Array.isArray(data) && Array.isArray(data[0])) {
     const translated = (data[0] as unknown[][])
       .map((item) => (Array.isArray(item) && typeof item[0] === 'string' ? item[0] : ''))
@@ -167,18 +205,30 @@ async function translateWithGoogle(text: string, toLang = 'zh-CN'): Promise<{ tr
   throw new Error('Google translate returned unexpected structure');
 }
 
-/** Source 3: User-defined Custom LLM (DeepSeek, OpenAI, Ollama) */
+/** Format and normalize Custom LLM URL */
+function normalizeLlmEndpoint(rawUrl: string): string {
+  let url = rawUrl.trim().replace(/\/+$/, '');
+  if (url.endsWith('/chat/completions')) return url;
+  if (!url.endsWith('/v1')) {
+    // If user provided base like https://api.deepseek.com or https://api.openai.com
+    url = `${url}/v1`;
+  }
+  return `${url}/chat/completions`;
+}
+
+/** Source 4: User-defined Custom LLM (DeepSeek, OpenAI, Ollama) */
 async function translateWithCustomLLM(
   text: string,
   config: TranslationConfig,
   toLang = '简体中文',
 ): Promise<{ translated: string; fromLang: string }> {
-  if (!config.customBaseUrl) throw new Error('Custom LLM Base URL is missing');
+  if (!config.customBaseUrl?.trim()) {
+    throw new Error('未配置 API 根地址 (Base URL)');
+  }
 
-  const baseUrl = config.customBaseUrl.replace(/\/+$/, '');
-  const url = `${baseUrl}/chat/completions`;
-  const model = config.customModel || 'deepseek-chat';
-  const apiKey = config.customApiKey || '';
+  const endpoint = normalizeLlmEndpoint(config.customBaseUrl);
+  const model = config.customModel?.trim() || 'deepseek-chat';
+  const apiKey = config.customApiKey?.trim() || '';
 
   const systemPrompt =
     config.customPrompt ||
@@ -197,7 +247,7 @@ async function translateWithCustomLLM(
   }
 
   const res = await fetchWithTimeout(
-    url,
+    endpoint,
     {
       method: 'POST',
       headers,
@@ -210,17 +260,24 @@ async function translateWithCustomLLM(
         temperature: 0.2,
       }),
     },
-    8000,
+    10000,
   );
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    throw new Error(`Custom LLM HTTP ${res.status}: ${errText.slice(0, 100)}`);
+    let parsedMsg = errText.slice(0, 150);
+    try {
+      const errObj = JSON.parse(errText) as { error?: { message?: string } };
+      if (errObj.error?.message) parsedMsg = errObj.error.message;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`API 响应错误 (HTTP ${res.status}): ${parsedMsg}`);
   }
 
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const content = data.choices?.[0]?.message?.content?.trim();
-  if (!content) throw new Error('Custom LLM returned empty message content');
+  if (!content) throw new Error('API 返回消息内容为空');
 
   return { translated: content, fromLang: 'auto' };
 }
@@ -230,7 +287,7 @@ function translateWithLocalDict(text: string): string | null {
   const lower = text.trim().toLowerCase();
   if (LOCAL_TERMS[lower]) return LOCAL_TERMS[lower];
   for (const [key, val] of Object.entries(LOCAL_TERMS)) {
-    if (lower.includes(key)) {
+    if (lower === key || lower.includes(key)) {
       return text.replace(new RegExp(key, 'gi'), val);
     }
   }
@@ -270,7 +327,7 @@ export async function translateText(
     };
   }
 
-  // 2. Custom LLM path (if user configured)
+  // 2. Custom LLM path (if user explicitly selected custom_llm)
   if (config?.provider === 'custom_llm') {
     try {
       const res = await translateWithCustomLLM(clean, config, toLang);
@@ -284,11 +341,20 @@ export async function translateText(
         sourceUsed: `Custom LLM (${config.customModel || 'default'})`,
       };
     } catch (e) {
-      console.warn('Custom LLM translation failed, falling back to public engines:', e);
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.warn('Custom LLM translation failed:', errMsg);
+      return {
+        ok: false,
+        original: clean,
+        translated: clean,
+        fromLang: 'en',
+        toLang,
+        error: `自定义大模型翻译失败: ${errMsg}`,
+      };
     }
   }
 
-  // 3. Fast Local Linux Dictionary Check
+  // 3. Fast Local Linux Dictionary Check (Instant 0ms match)
   const localMatch = translateWithLocalDict(clean);
   if (localMatch) {
     saveCache(cacheKey, localMatch, 'en', 'Local Linux Terms');
@@ -302,15 +368,31 @@ export async function translateText(
     };
   }
 
-  // 4. Fast Youdao Suggest (Domestic 100% available without VPN)
+  // 4. Youdao Mobile Sentence / Term API (100% domestic reachable)
   try {
-    const yd = await translateWithYoudao(clean);
-    saveCache(cacheKey, yd.translated, yd.fromLang, 'Youdao Dictionary');
+    const yd = await translateWithYoudaoMobile(clean);
+    saveCache(cacheKey, yd.translated, yd.fromLang, 'Youdao Engine');
     return {
       ok: true,
       original: clean,
       translated: yd.translated,
       fromLang: yd.fromLang,
+      toLang,
+      sourceUsed: 'Youdao Engine',
+    };
+  } catch {
+    /* fallback to suggest */
+  }
+
+  // 5. Youdao Dictionary Suggest (for words & short phrases)
+  try {
+    const ys = await translateWithYoudaoSuggest(clean);
+    saveCache(cacheKey, ys.translated, ys.fromLang, 'Youdao Dictionary');
+    return {
+      ok: true,
+      original: clean,
+      translated: ys.translated,
+      fromLang: ys.fromLang,
       toLang,
       sourceUsed: 'Youdao Dictionary',
     };
@@ -318,7 +400,7 @@ export async function translateText(
     /* try next */
   }
 
-  // 5. Google Translate (if accessible)
+  // 6. Google Translate (if accessible)
   try {
     const gg = await translateWithGoogle(clean, toLang);
     saveCache(cacheKey, gg.translated, gg.fromLang, 'Google Translate');
@@ -340,7 +422,7 @@ export async function translateText(
     translated: clean,
     fromLang: 'en',
     toLang,
-    error: '网络公共翻译源受限，建议在左上角菜单「系统偏好」中配置 DeepSeek API Key 开启大模型高精度翻译',
+    error: '公共翻译接口连接超时，请检查网络或配置自定义大模型 API',
   };
 }
 
