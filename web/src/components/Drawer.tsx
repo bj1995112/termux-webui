@@ -102,11 +102,13 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   const loadConversationDetail = useDeck((s) => s.loadConversationDetail);
   const showToast = useDeck((s) => s.showToast);
 
-  // Auth & Theme & Appearance
+  // Auth & Theme & Appearance & Translation
   const currentTheme = useDeck((s) => s.currentTheme);
   const setTheme = useDeck((s) => s.setTheme);
   const fontSize = useDeck((s) => s.fontSize);
   const resetFontSize = useDeck((s) => s.resetFontSize);
+  const translationConfig = useDeck((s) => s.translationConfig);
+  const setTranslationConfig = useDeck((s) => s.setTranslationConfig);
   const logout = useDeck((s) => s.logout);
 
   // Terminal preferences
@@ -651,6 +653,76 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                     >
                       重置 13px
                     </button>
+                  )}
+                </div>
+
+                {/* 🌐 翻译引擎配置 */}
+                <div className="pt-2 border-t border-border/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-text font-medium block">🌐 翻译引擎配置</span>
+                      <span className="text-[10px] text-muted block">支持自动多源故障转移与自定义大模型</span>
+                    </div>
+                  </div>
+
+                  {/* 引擎提供商选择 */}
+                  <select
+                    value={translationConfig.provider}
+                    onChange={(e) =>
+                      setTranslationConfig({
+                        provider: e.target.value as any,
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-panel2 px-2.5 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
+                  >
+                    <option value="auto">🔄 自动多源故障转移 (Google + Lingva，推荐免Key)</option>
+                    <option value="google">🌐 Google 官方 Web 翻译通道</option>
+                    <option value="lingva">🌍 Lingva 开源镜像通道</option>
+                    <option value="custom_llm">🤖 自定义大模型 API (DeepSeek / OpenAI / Ollama)</option>
+                  </select>
+
+                  {/* 自定义大模型参数配置 */}
+                  {translationConfig.provider === 'custom_llm' && (
+                    <div className="space-y-2 rounded-lg border border-accent/30 bg-accent/5 p-2.5 text-xs animate-in fade-in">
+                      <div>
+                        <label className="block text-[10px] text-muted mb-0.5">Base URL (API 根地址):</label>
+                        <input
+                          type="text"
+                          value={translationConfig.customBaseUrl || ''}
+                          placeholder="例如: https://api.deepseek.com/v1"
+                          onChange={(e) =>
+                            setTranslationConfig({ customBaseUrl: e.target.value })
+                          }
+                          className="w-full rounded border border-border bg-panel px-2 py-1 text-[11px] text-text font-mono focus:border-accent focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-muted mb-0.5">API Key (令牌密钥):</label>
+                        <input
+                          type="password"
+                          value={translationConfig.customApiKey || ''}
+                          placeholder="sk-..."
+                          onChange={(e) =>
+                            setTranslationConfig({ customApiKey: e.target.value })
+                          }
+                          className="w-full rounded border border-border bg-panel px-2 py-1 text-[11px] text-text font-mono focus:border-accent focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-muted mb-0.5">Model (模型名称):</label>
+                        <input
+                          type="text"
+                          value={translationConfig.customModel || ''}
+                          placeholder="例如: deepseek-chat 或 gpt-4o-mini"
+                          onChange={(e) =>
+                            setTranslationConfig({ customModel: e.target.value })
+                          }
+                          className="w-full rounded border border-border bg-panel px-2 py-1 text-[11px] text-text font-mono focus:border-accent focus:outline-none"
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
 

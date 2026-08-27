@@ -27,7 +27,7 @@ const TWO_ROW_CORE_R1 = [
   key("Ctrl", null),
   key("Alt", null),
   key("Ctrl+C", "\x03"),
-  key("Ctrl+D", "\x04"),
+  key("🌐 译", "__TRANSLATE__"),
   key("Enter", "\r"),
   key("⌫", "\x7f"),
 ];
@@ -210,8 +210,14 @@ export default function QuickKeyboard({
     }
   }, [send]);
 
+  const toggleScreenTranslation = useDeck((s) => s.toggleScreenTranslation);
+
   const sendKey = useCallback(
     (item: KeyDef) => {
+      if (item.seq === "__TRANSLATE__") {
+        toggleScreenTranslation();
+        return;
+      }
       if (item.seq === "__PASTE__") {
         void pasteClipboard();
         return;

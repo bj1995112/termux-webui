@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useDeck } from '../store';
 
 function formatExactDate(ts?: number): string {
@@ -12,10 +13,32 @@ export default function ConversationPreviewModal() {
   const closePreview = useDeck((s) => s.closePreview);
   const resumeConversation = useDeck((s) => s.resumeConversation);
   const showToast = useDeck((s) => s.showToast);
+  const translateText = useDeck((s) => s.translateText);
+
+  const [translations, setTranslations] = useState<Record<number, string>>({});
 
   if (!previewDetail) return null;
 
   const { conversation: conv, messages } = previewDetail;
+
+  const handleTranslateMessage = async (idx: number, text: string) => {
+    if (translations[idx]) {
+      // Toggle off
+      setTranslations((prev) => {
+        const next = { ...prev };
+        delete next[idx];
+        return next;
+      });
+      return;
+    }
+    showToast('正在翻译消息...', 'info');
+    try {
+      const translated = await translateText(text);
+      setTranslations((prev) => ({ ...prev, [idx]: translated }));
+    } catch {
+      showToast('翻译失败', 'error');
+    }
+  };
 
   const handleCopy = async (text: string) => {
     try {
@@ -91,13 +114,31 @@ export default function ConversationPreviewModal() {
                     }`}
                   >
                     <div className="whitespace-pre-wrap font-sans">{m.content}</div>
-                    <button
-                      onClick={() => handleCopy(m.content)}
-                      className="absolute right-2 top-2 rounded bg-panel/80 px-1.5 py-0.5 text-[10px] text-muted opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
-                      title="复制本段"
-                    >
-                      📋 复制
-                    </button>
+
+                    {/* Translated Content Block */}
+                    {translations[idx] && (
+                      <div className="mt-2 pt-2 border-t border-border/40 text-text font-sans text-xs bg-accent/5 p-2 rounded-lg border border-accent/20">
+                        <span className="font-bold text-accent text-[10px] block mb-1">🇨🇳 译文：</span>
+                        <div className="whitespace-pre-wrap">{translations[idx]}</div>
+                      </div>
+                    )}
+
+                    <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleTranslateMessage(idx, m.content)}
+                        className="rounded bg-panel/90 px-1.5 py-0.5 text-[10px] text-accent hover:bg-panel shadow-sm"
+                        title="翻译本条内容"
+                      >
+                        🌐 译
+                      </button>
+                      <button
+                        onClick={() => handleCopy(m.content)}
+                        className="rounded bg-panel/90 px-1.5 py-0.5 text-[10px] text-muted hover:text-text shadow-sm"
+                        title="复制本段"
+                      >
+                        📋 复制
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

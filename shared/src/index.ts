@@ -93,3 +93,33 @@ export interface LoginResponse {
   token?: string;
   error?: string;
 }
+
+// ---- Translation Protocol -------------------------------------------------
+
+export type TranslationProvider = 'auto' | 'google' | 'bing' | 'lingva' | 'custom_llm';
+
+export interface TranslationConfig {
+  provider: TranslationProvider;
+  customBaseUrl?: string;
+  customApiKey?: string;
+  customModel?: string;
+  customPrompt?: string;
+}
+
+export interface TranslateRequestBody {
+  text: string;
+  from?: string;
+  to?: string;
+  config?: TranslationConfig;
+}
+
+export interface TranslateResponse {
+  ok: boolean;
+  original: string;
+  translated: string;
+  fromLang?: string;
+  toLang?: string;
+  sourceUsed?: string;
+  cached?: boolean;
+  error?: string;
+}

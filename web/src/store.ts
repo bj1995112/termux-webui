@@ -1,7 +1,16 @@
 import { create } from 'zustand';
-import type { CliInfo, SessionInfo, AgentConversation, CliId, ConversationDetail } from '@termux-webui/shared';
+import type {
+  CliInfo,
+  SessionInfo,
+  AgentConversation,
+  CliId,
+  ConversationDetail,
+  TranslationConfig,
+  TranslateResponse,
+} from '@termux-webui/shared';
 import { type ThemeId, applyTheme } from './theme';
 import { deckSocket } from './lib/ws';
+import { getCachedTranslation, setCachedTranslation } from './lib/translateCache';
 
 interface DeckState {
   clis: CliInfo[];
@@ -25,6 +34,13 @@ interface DeckState {
   fontSize: number;
   setFontSize: (size: number) => void;
   resetFontSize: () => void;
+
+  // Translation System
+  translationConfig: TranslationConfig;
+  setTranslationConfig: (cfg: Partial<TranslationConfig>) => void;
+  isTranslatingScreen: boolean;
+  toggleScreenTranslation: (force?: boolean) => void;
+  translateText: (text: string, toLang?: string) => Promise<string>;
 
   // Toast
   toast: { message: string; type: 'info' | 'success' | 'error' } | null;
@@ -106,8 +122,62 @@ export const useDeck = create<DeckState>((set, get) => {
       const num = saved ? parseInt(saved, 10) : 13;
       return num >= 6 && num <= 36 ? num : 13;
     })(),
+    translationConfig: (() => {
+      try {
+        const saved = localStorage.getItem('twui.transConfig');
+        return saved ? JSON.parse(saved) : { provider: 'auto' };
+      } catch {
+        return { provider: 'auto' };
+      }
+    })(),
+    isTranslatingScreen: false,
     toast: null,
     previewDetail: null,
+
+    setTranslationConfig: (cfg: Partial<TranslationConfig>) => {
+      const current = get().translationConfig;
+      const updated = { ...current, ...cfg };
+      localStorage.setItem('twui.transConfig', JSON.stringify(updated));
+      set({ translationConfig: updated });
+      get().showToast('翻译引擎配置已更新', 'success');
+    },
+
+    toggleScreenTranslation: (force?: boolean) => {
+      const next = typeof force === 'boolean' ? force : !get().isTranslatingScreen;
+      set({ isTranslatingScreen: next });
+      get().showToast(next ? '🌐 全屏原位翻译已开启' : '🌐 已切回原生英文终端', 'info');
+    },
+
+    translateText: async (text: string, toLang = 'zh-CN') => {
+      const clean = text.trim();
+      if (!clean) return text;
+
+      // 1. Zero-latency local cache lookup
+      const cached = await getCachedTranslation(clean, toLang);
+      if (cached) return cached;
+
+      // 2. Fetch from backend proxy
+      try {
+        const res = await authFetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: clean,
+            to: toLang,
+            config: get().translationConfig,
+          }),
+        });
+        const data = (await res.json()) as TranslateResponse;
+        if (data.ok && data.translated) {
+          void setCachedTranslation(clean, data.translated, toLang);
+          return data.translated;
+        }
+        return clean;
+      } catch (err) {
+        console.warn('Translation request error:', err);
+        return clean;
+      }
+    },
 
     setFontSize: (size: number) => {
       const clamped = Math.min(36, Math.max(6, Math.round(size)));

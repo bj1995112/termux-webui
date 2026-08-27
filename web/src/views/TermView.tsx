@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
 import { THEMES } from '../theme.js';
+import TranslationOverlay from '../components/TranslationOverlay.js';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
@@ -81,6 +82,15 @@ export default function TermView({ sessionId, active }: Props) {
   const [exitCode, setExitCode] = useState<number | null>(null);
   const [activeUrl, setActiveUrl] = useState<string | null>(null);
   const [zoomIndicator, setZoomIndicator] = useState<number | null>(null);
+  const [selectedTranslation, setSelectedTranslation] = useState<{
+    original: string;
+    translated: string;
+    loading: boolean;
+  } | null>(null);
+
+  const isTranslatingScreen = useDeck((s) => s.isTranslatingScreen);
+  const toggleScreenTranslation = useDeck((s) => s.toggleScreenTranslation);
+  const translateText = useDeck((s) => s.translateText);
 
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
@@ -655,6 +665,21 @@ export default function TermView({ sessionId, active }: Props) {
     setShowBar(false);
   };
 
+  const doTranslateSelection = async () => {
+    const term = termRef.current;
+    if (!term) return;
+    const sel = term.getSelection().trim();
+    if (!sel) return;
+
+    setSelectedTranslation({ original: sel, translated: '正在翻译...', loading: true });
+    try {
+      const translated = await translateText(sel);
+      setSelectedTranslation({ original: sel, translated, loading: false });
+    } catch {
+      setSelectedTranslation({ original: sel, translated: '翻译失败，请稍后重试', loading: false });
+    }
+  };
+
   const handleRestart = async () => {
     setIsExited(false);
     await restartSession(sessionId);
@@ -662,6 +687,14 @@ export default function TermView({ sessionId, active }: Props) {
 
   return (
     <div className="term-host absolute inset-0 h-full w-full" ref={hostRef}>
+      {/* 1:1 In-Place Translation Overlay */}
+      {isTranslatingScreen && active && (
+        <TranslationOverlay
+          term={termRef.current}
+          onClose={() => toggleScreenTranslation(false)}
+        />
+      )}
+
       {/* Exited Notification Banner */}
       {isExited && (
         <div className="exit-banner absolute top-2 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-panel/90 px-3.5 py-1.5 text-xs shadow-xl backdrop-blur-md">
@@ -680,6 +713,45 @@ export default function TermView({ sessionId, active }: Props) {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {/* Selection Translation Popup Card */}
+      {selectedTranslation && (
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-50 flex w-[90%] max-w-sm flex-col gap-2 rounded-2xl border border-accent/40 bg-panel/95 p-3.5 text-xs shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95">
+          <div className="flex items-center justify-between border-b border-border/40 pb-1.5">
+            <span className="font-bold text-accent flex items-center gap-1.5">
+              <span>🌐</span>
+              <span>选词翻译结果</span>
+            </span>
+            <button
+              onClick={() => setSelectedTranslation(null)}
+              className="rounded p-1 text-muted hover:text-text"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="space-y-1.5 font-mono">
+            <div className="text-[11px] text-muted line-clamp-3 select-text bg-panel2/60 p-2 rounded-lg border border-border/30">
+              {selectedTranslation.original}
+            </div>
+            <div className="text-[12px] font-semibold text-text select-text bg-accent/10 p-2 rounded-lg border border-accent/20">
+              {selectedTranslation.translated}
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              onClick={() => {
+                void copyText(selectedTranslation.translated);
+                showToast('已复制译文', 'success');
+                setSelectedTranslation(null);
+              }}
+              className="flex items-center gap-1 rounded-lg bg-accent px-2.5 py-1 text-[11px] font-semibold text-white shadow active:scale-95"
+            >
+              <span>📋</span>
+              <span>复制译文</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -743,6 +815,9 @@ export default function TermView({ sessionId, active }: Props) {
         <div className="sel-bar">
           <button onClick={() => void doCopy()} className="sel-bar-btn primary">
             {copied ? '已复制✓' : '复制'}
+          </button>
+          <button onClick={() => void doTranslateSelection()} className="sel-bar-btn">
+            🌐 翻译
           </button>
           <button onClick={doSelectAll} className="sel-bar-btn">全选</button>
           <button onClick={doCancel} className="sel-bar-btn">取消</button>

@@ -10,6 +10,7 @@ import { listProjects } from './projects.js';
 import { SessionManager } from './sessions.js';
 import { listAllConversations, deleteConversation, getConversationDetail } from './history.js';
 import { checkPassword, createToken, verifyToken, revokeToken } from './auth.js';
+import { translateText } from './translator.js';
 
 const PORT = Number(process.env.PORT || 4150);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -132,6 +133,17 @@ app.post('/api/sessions/:id/restart', (c) => {
   const info = manager.restart(c.req.param('id'));
   if (!info) return c.json({ error: 'no such session' }, 404);
   return c.json(info);
+});
+
+app.post('/api/translate', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { text?: string; to?: string; config?: any } | null;
+  const text = body?.text;
+  if (!text || typeof text !== 'string') {
+    return c.json({ error: 'text is required' }, 400);
+  }
+  const toLang = body?.to || 'zh-CN';
+  const result = await translateText(text, toLang, body?.config);
+  return c.json(result, result.ok ? 200 : 502);
 });
 
 app.delete('/api/sessions/:id', (c) => {
