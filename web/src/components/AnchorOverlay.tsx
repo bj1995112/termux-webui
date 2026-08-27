@@ -6,9 +6,10 @@ interface Props {
   term: Terminal | null;
   anchors: TranslationAnchor[];
   visible?: boolean;
+  renderTick?: number;
 }
 
-export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }) => {
+export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true, renderTick = 0 }) => {
   const visibleAnchors = useMemo(() => {
     if (!term || !visible || anchors.length === 0) return [];
     const buf = term.buffer.active;
@@ -18,7 +19,7 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }
     return anchors.filter(
       (a) => a.bufferRow >= viewportY && a.bufferRow < viewportY + rows,
     );
-  }, [term, anchors, visible]);
+  }, [term, anchors, visible, renderTick]);
 
   if (!term || !visible || visibleAnchors.length === 0) return null;
 
