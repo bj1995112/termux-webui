@@ -12,6 +12,7 @@ import { listAllConversations, deleteConversation, getConversationDetail } from 
 import { checkPassword, createToken, verifyToken, revokeToken } from './auth.js';
 import { translateText } from './translator.js';
 import { learnedDict } from './learnedDict.js';
+import { officialDictSync } from './officialDictSync.js';
 
 const PORT = Number(process.env.PORT || 4150);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -185,6 +186,16 @@ app.get('/api/dictionary/export', (c) => {
   const list = learnedDict.getAll();
   c.header('Content-Disposition', 'attachment; filename="learned_dict_backup.json"');
   return c.json(list);
+});
+
+// --- Official Dictionary Cloud Sync ---
+app.get('/api/dictionary/sync-status', (c) => {
+  return c.json({ ok: true, ...officialDictSync.getStatus() });
+});
+
+app.post('/api/dictionary/sync', async (c) => {
+  const result = await officialDictSync.syncLatest();
+  return c.json(result);
 });
 
 app.delete('/api/sessions/:id', (c) => {

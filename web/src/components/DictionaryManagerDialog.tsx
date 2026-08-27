@@ -16,26 +16,40 @@ interface LearnedEntry {
   source?: string;
 }
 
+interface SyncStatus {
+  lastSyncTime: number;
+  entryCount: number;
+  version: string;
+  isAutoSyncEnabled: boolean;
+}
+
 export const DictionaryManagerDialog: React.FC<Props> = ({ open, onClose }) => {
   const [entries, setEntries] = useState<LearnedEntry[]>([]);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [query, setQuery] = useState('');
   const [editItem, setEditItem] = useState<{ original: string; translated: string } | null>(null);
   const [newOrig, setNewOrig] = useState('');
   const [newTrans, setNewTrans] = useState('');
   const showToast = useDeck((s) => s.showToast);
 
-  const fetchDictionary = async () => {
+  const fetchDictionaryAndStatus = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/dictionary', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('twui.token') || ''}`,
-        },
-      });
-      const data = await res.json();
-      if (data.ok && Array.isArray(data.entries)) {
-        setEntries(data.entries);
+      const token = localStorage.getItem('twui.token') || '';
+      const [resDict, resStatus] = await Promise.all([
+        fetch('/api/dictionary', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/dictionary/sync-status', { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const dataDict = await resDict.json();
+      const dataStatus = await resStatus.json();
+
+      if (dataDict.ok && Array.isArray(dataDict.entries)) {
+        setEntries(dataDict.entries);
+      }
+      if (dataStatus.ok) {
+        setSyncStatus(dataStatus);
       }
     } catch {
       showToast('获取词库数据失败', 'error');
@@ -46,9 +60,32 @@ export const DictionaryManagerDialog: React.FC<Props> = ({ open, onClose }) => {
 
   useEffect(() => {
     if (open) {
-      void fetchDictionary();
+      void fetchDictionaryAndStatus();
     }
   }, [open]);
+
+  const handleCloudSync = async () => {
+    setSyncing(true);
+    showToast('正在从云端拉取最新官方词库...', 'info');
+    try {
+      const token = localStorage.getItem('twui.token') || '';
+      const res = await fetch('/api/dictionary/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✅ ${data.message}`, 'success');
+        void fetchDictionaryAndStatus();
+      } else {
+        showToast('云端同步失败，已保留本地词库', 'error');
+      }
+    } catch (e) {
+      showToast(`同步请求异常: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const filteredEntries = useMemo(() => {
     if (!query.trim()) return entries;
@@ -77,7 +114,7 @@ export const DictionaryManagerDialog: React.FC<Props> = ({ open, onClose }) => {
         setEditItem(null);
         setNewOrig('');
         setNewTrans('');
-        void fetchDictionary();
+        void fetchDictionaryAndStatus();
       }
     } catch {
       showToast('保存失败', 'error');
@@ -126,7 +163,7 @@ export const DictionaryManagerDialog: React.FC<Props> = ({ open, onClose }) => {
       const data = await res.json();
       if (data.ok) {
         showToast(`成功导入 ${data.importedCount} 条词条`, 'success');
-        void fetchDictionary();
+        void fetchDictionaryAndStatus();
       }
     } catch (e) {
       showToast('导入失败：请检查文件格式', 'error');
@@ -143,23 +180,41 @@ export const DictionaryManagerDialog: React.FC<Props> = ({ open, onClose }) => {
           <div className="flex items-center gap-2">
             <span className="text-xl">📚</span>
             <div>
-              <h2 className="text-base font-bold text-text">编程词典与自学习记忆库</h2>
-              <p className="text-[11px] text-muted">0ms 离线高精度翻译 · 自动捕获新词 · 永久持久化</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-text">编程词典与自学习记忆库</h2>
+                <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold text-accent">
+                  官方 {syncStatus?.version || 'v1.1.0'}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted">0ms 离线高精度翻译 · 一键云端同步 · 自动捕获新词</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-xl p-1.5 text-muted hover:bg-panel2 hover:text-text active:scale-95 transition-all"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCloudSync}
+              disabled={syncing}
+              className="flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/15 px-3 py-1.5 text-xs font-bold text-accent hover:bg-accent/25 active:scale-95 transition-all disabled:opacity-50 shadow-sm"
+              title="一键检查并同步官方最新词库"
+            >
+              <span>{syncing ? '⏳' : '☁️'}</span>
+              <span>{syncing ? '同步中...' : '同步官方词库'}</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-xl p-1.5 text-muted hover:bg-panel2 hover:text-text active:scale-95 transition-all"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Stats Row */}
         <div className="grid grid-cols-3 gap-2.5 py-3">
           <div className="rounded-2xl border border-accent/20 bg-accent/10 p-2.5 text-center">
-            <span className="text-[11px] text-accent font-medium">内置标准词库</span>
-            <p className="text-base font-bold text-accent">2,580+ 词条</p>
+            <span className="text-[11px] text-accent font-medium">官方标准词库</span>
+            <p className="text-base font-bold text-accent">
+              {syncStatus?.entryCount ? `${syncStatus.entryCount}+ 词条` : '2,580+ 词条'}
+            </p>
           </div>
           <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-2.5 text-center">
             <span className="text-[11px] text-emerald-400 font-medium">已自动学习</span>

@@ -5,9 +5,11 @@ import {
   DEV_TOOL_TEMPLATES,
 } from '@termux-webui/shared';
 import { learnedDict } from './learnedDict.js';
+import { officialDictSync } from './officialDictSync.js';
 
-// Auto-initialize learned dictionary from disk on startup
+// Auto-initialize learned dictionary & official dictionary sync from disk on startup
 void learnedDict.init();
+void officialDictSync.init();
 
 /** Strip ANSI color/style escape codes */
 export function stripAnsi(text: string): string {
@@ -407,17 +409,17 @@ export async function translateText(
     }
   }
 
-  // 3. Ultra-Fast Standard Developer IT & CLI Dictionary (0ms offline exact match)
-  const devExact = DEV_TOOL_EXACT_DICT[targetToTranslate] || DEV_TOOL_EXACT_DICT[targetToTranslate.toLowerCase()];
-  if (devExact) {
-    saveCache(cacheKey, devExact, 'en', 'Developer Standard Dictionary');
+  // 3. Ultra-Fast Standard Developer IT & CLI Dictionary (0ms offline exact match + Cloud Synced)
+  const officialMatched = officialDictSync.get(targetToTranslate);
+  if (officialMatched) {
+    saveCache(cacheKey, officialMatched, 'en', 'Official Standard Dictionary');
     return {
       ok: true,
       original: clean,
-      translated: prompt + devExact,
+      translated: prompt + officialMatched,
       fromLang: 'en',
       toLang,
-      sourceUsed: 'Developer Standard Dictionary',
+      sourceUsed: 'Official Standard Dictionary',
     };
   }
 
