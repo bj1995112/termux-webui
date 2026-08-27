@@ -15,7 +15,7 @@ import { learnedDict } from './learnedDict.js';
 import { officialDictSync } from './officialDictSync.js';
 
 const PORT = Number(process.env.PORT || 4150);
-const HOST = process.env.HOST || '127.0.0.1';
+const HOST = process.env.HOST || '0.0.0.0';
 
 export const manager = new SessionManager();
 

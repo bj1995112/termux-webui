@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { DEV_TOOL_EXACT_DICT } from '@termux-webui/shared';
-import { translate } from './translator.js';
+import { translateText } from './translator.js';
 
 const STORAGE_DIR = path.join(os.homedir(), '.termux-webui');
 const OFFICIAL_FILE = path.join(STORAGE_DIR, 'official_dict.json');
@@ -218,7 +218,7 @@ class CommandStudioManager {
           // Translate to Chinese
           let zhDesc = rawDesc;
           try {
-            zhDesc = await translate(rawDesc);
+            zhDesc = await translateText(rawDesc);
           } catch {
             /* fallback to raw */
           }
