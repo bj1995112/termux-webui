@@ -7,6 +7,8 @@ import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
 import { THEMES } from '../theme.js';
+import { TerminalStreamPipeline, type TranslationAnchor } from '../lib/streamPipeline.js';
+import { AnchorOverlay } from '../components/AnchorOverlay.js';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
@@ -119,6 +121,8 @@ export default function TermView({ sessionId, active }: Props) {
   } | null>(null);
 
   const translateText = useDeck((s) => s.translateText);
+  const [anchors, setAnchors] = useState<TranslationAnchor[]>([]);
+  const pipelineRef = useRef<TerminalStreamPipeline | null>(null);
 
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
@@ -204,6 +208,10 @@ export default function TermView({ sessionId, active }: Props) {
     term.open(host);
     term.onData((data) => deckSocket.send({ type: 'input', sessionId, data }));
 
+    const pipeline = new TerminalStreamPipeline(term, translateText, setAnchors);
+    pipelineRef.current = pipeline;
+    requestAnimationFrame(() => pipeline.refresh());
+
     const fitNow = () => {
       if (host.clientWidth > 0 && host.clientHeight > 0) {
         fit.fit();
@@ -218,6 +226,7 @@ export default function TermView({ sessionId, active }: Props) {
           }
         }
         deckSocket.send({ type: 'resize', sessionId, cols: term.cols, rows: term.rows });
+        pipeline.refresh();
       }
     };
     fitFns.set(sessionId, fitNow);
@@ -235,10 +244,11 @@ export default function TermView({ sessionId, active }: Props) {
     term.onScroll(() => {
       if (!useDeck.getState().followOutput) {
         followRef.current = false;
-        return;
+      } else {
+        const buf = term.buffer.active;
+        followRef.current = buf.baseY - buf.viewportY <= 1;
       }
-      const buf = term.buffer.active;
-      followRef.current = buf.baseY - buf.viewportY <= 1;
+      pipeline.feed();
     });
 
     let selecting = false;
@@ -260,6 +270,7 @@ export default function TermView({ sessionId, active }: Props) {
         }
         term.write(msg.data, () => {
           if (followRefs.get(sessionId)?.current) term.scrollToBottom();
+          pipeline.feed();
         });
       }
       if (msg.type === 'exit' && msg.sessionId === sessionId) {
@@ -577,6 +588,8 @@ export default function TermView({ sessionId, active }: Props) {
 
     return () => {
       off();
+      pipeline.clear();
+      pipelineRef.current = null;
       ro.disconnect();
       if (pressTimer) clearTimeout(pressTimer);
       if (zoomHideTimer) clearTimeout(zoomHideTimer);
@@ -725,6 +738,9 @@ export default function TermView({ sessionId, active }: Props) {
 
   return (
     <div className="term-host absolute inset-0 h-full w-full" ref={hostRef}>
+      {/* Real-time Dual Pipeline Translation Anchor Overlay */}
+      <AnchorOverlay term={termRef.current} anchors={anchors} />
+
       {/* Exited Notification Banner */}
       {isExited && (
         <div className="exit-banner absolute top-2 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-panel/90 px-3.5 py-1.5 text-xs shadow-xl backdrop-blur-md">
