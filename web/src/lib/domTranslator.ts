@@ -2,16 +2,19 @@ import type { Terminal } from '@xterm/xterm';
 
 export type TranslateFn = (text: string, toLang?: string) => Promise<string>;
 
+/**
+ * Chromium Google-Translate-Style In-DOM Terminal Translator
+ * Directly translates .xterm-rows text nodes without causing layout jumps or flicker.
+ */
 export class ChromeStyleDOMTranslator {
   private term: Terminal;
   private host: HTMLElement;
   private translateFn: TranslateFn;
   private active = false;
   private disposables: { dispose: () => void }[] = [];
-  private observer: MutationObserver | null = null;
   private debounceTimer: number | null = null;
-  private isMutating = false; // Prevent infinite mutation loops
   private lineCache = new Map<string, string>(); // English -> Chinese cache
+  private originalCursorBlink = true;
 
   constructor(term: Terminal, host: HTMLElement, translateFn: TranslateFn) {
     this.term = term;
@@ -23,38 +26,17 @@ export class ChromeStyleDOMTranslator {
     if (this.active) return;
     this.active = true;
 
-    // 1. Initial translation of visible rows
-    void this.translateDOMRows();
+    // 1. Freeze xterm cursor blinking to eliminate background repaint loop
+    this.originalCursorBlink = this.term.options.cursorBlink ?? true;
+    this.term.options.cursorBlink = false;
 
-    // 2. Listen to xterm render & scroll events
-    const d1 = this.term.onRender(() => this.scheduleTranslate());
-    const d2 = this.term.onScroll(() => this.scheduleTranslate());
-    const d3 = this.term.onLineFeed(() => this.scheduleTranslate());
-    this.disposables.push(d1, d2, d3);
+    // 2. Perform initial translation pass on visible rows
+    void this.translateVisibleDOMRows();
 
-    // 3. MutationObserver on .xterm-rows to immediately catch xterm DOM repaints
-    const rowContainer = this.host.querySelector('.xterm-rows');
-    if (rowContainer) {
-      this.observer = new MutationObserver((mutations) => {
-        if (this.isMutating || !this.active) return;
-        let needsUpdate = false;
-        for (const m of mutations) {
-          if (m.type === 'childList' || m.type === 'characterData') {
-            needsUpdate = true;
-            break;
-          }
-        }
-        if (needsUpdate) {
-          this.scheduleTranslate();
-        }
-      });
-
-      this.observer.observe(rowContainer, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-      });
-    }
+    // 3. Listen to scroll events with a 300ms idle debounce (Google Translate style)
+    const dScroll = this.term.onScroll(() => this.scheduleTranslate(300));
+    const dLineFeed = this.term.onLineFeed(() => this.scheduleTranslate(400));
+    this.disposables.push(dScroll, dLineFeed);
   }
 
   public disable(): void {
@@ -66,17 +48,15 @@ export class ChromeStyleDOMTranslator {
     }
     this.disposables = [];
 
-    if (this.observer) {
-      this.observer.disconnect();
-      this.observer = null;
-    }
-
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
 
-    // Force clean original English re-render
+    // Restore cursor blink preference
+    this.term.options.cursorBlink = this.originalCursorBlink;
+
+    // Force xterm to repaint clean original English text instantly
     this.term.refresh(0, Math.max(0, this.term.rows - 1));
   }
 
@@ -84,50 +64,52 @@ export class ChromeStyleDOMTranslator {
     return this.active;
   }
 
-  private scheduleTranslate(): void {
+  private scheduleTranslate(delayMs = 300): void {
     if (!this.active) return;
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = window.setTimeout(() => {
-      void this.translateDOMRows();
-    }, 80); // Ultra-fast 80ms debounce
+      void this.translateVisibleDOMRows();
+    }, delayMs);
   }
 
-  /** Directly scan and translate .xterm-rows > div > span nodes */
-  public async translateDOMRows(): Promise<void> {
-    if (!this.active || this.isMutating) return;
+  /**
+   * Google-Translate-Style Safe TextNode Mutation:
+   * Extracts the full semantic line, translates it, and replaces text in-place using inline font wrappers.
+   */
+  public async translateVisibleDOMRows(): Promise<void> {
+    if (!this.active) return;
 
     const rowContainer = this.host.querySelector('.xterm-rows');
     if (!rowContainer) return;
 
     const rowDivs = Array.from(rowContainer.children) as HTMLElement[];
-    const rowsToFetch: { el: HTMLElement; spans: HTMLElement[]; rawText: string; trimmed: string }[] = [];
+    const rowsToFetch: { rowDiv: HTMLElement; fullText: string; trimmed: string }[] = [];
 
     for (const rowDiv of rowDivs) {
-      // Collect text from all child spans
-      const spans = Array.from(rowDiv.querySelectorAll('span')) as HTMLElement[];
-      const fullText = spans.map((s) => s.textContent || '').join('');
+      // Extract entire text across all spans in this row
+      const fullText = rowDiv.textContent || '';
       const trimmed = fullText.trim();
 
       if (!trimmed) continue;
 
-      // Avoid re-translating if already translated with same source
-      if (rowDiv.getAttribute('data-translated-src') === trimmed) {
+      // If already translated for this exact source text, skip
+      if (rowDiv.getAttribute('data-gtrans-src') === trimmed) {
         continue;
       }
 
       // Check cache first (0ms instant sync replacement)
       const cached = this.lineCache.get(trimmed);
       if (cached) {
-        this.applyTranslationToRow(rowDiv, spans, fullText, cached);
+        this.safeReplaceRowText(rowDiv, fullText, cached);
         continue;
       }
 
-      rowsToFetch.push({ el: rowDiv, spans, rawText: fullText, trimmed });
+      rowsToFetch.push({ rowDiv, fullText, trimmed });
     }
 
     if (rowsToFetch.length === 0) return;
 
-    // Fetch missing translations concurrently
+    // Batch translate all dirty rows concurrently
     const promises = rowsToFetch.map(async (item) => {
       try {
         const translated = await this.translateFn(item.trimmed);
@@ -142,41 +124,43 @@ export class ChromeStyleDOMTranslator {
 
     if (!this.active) return;
 
-    this.isMutating = true;
-    try {
-      for (const res of results) {
-        if (res.translated && res.translated !== res.item.trimmed) {
-          this.applyTranslationToRow(res.item.el, res.item.spans, res.item.rawText, res.translated);
-        }
+    // Apply translations using safe inline replacement
+    for (const res of results) {
+      if (res.translated && res.translated !== res.item.trimmed) {
+        this.safeReplaceRowText(res.item.rowDiv, res.item.fullText, res.translated);
       }
-    } finally {
-      // Re-enable mutation listening after short microtask
-      setTimeout(() => {
-        this.isMutating = false;
-      }, 30);
     }
   }
 
-  /** Apply translated Chinese text directly into xterm DOM spans */
-  private applyTranslationToRow(
-    rowDiv: HTMLElement,
-    spans: HTMLElement[],
-    originalFullText: string,
-    translatedText: string,
-  ): void {
+  /**
+   * Safe Inline Replacement (Google Translate <font> pattern):
+   * Replaces the row text while preserving exact layout and color.
+   */
+  private safeReplaceRowText(rowDiv: HTMLElement, originalFullText: string, translatedText: string): void {
+    const trimmed = originalFullText.trim();
     const leadingSpaces = originalFullText.match(/^\s*/)?.[0] || '';
     const targetText = leadingSpaces + translatedText;
 
-    rowDiv.setAttribute('data-translated-src', originalFullText.trim());
+    rowDiv.setAttribute('data-gtrans-src', trimmed);
 
+    // Google Translate pattern: wrap in inline font tag to maintain exact inline-block flow
+    const spans = Array.from(rowDiv.querySelectorAll('span')) as HTMLElement[];
     if (spans.length > 0) {
-      // Put full translated string into first span, empty remaining spans to keep layout clean
-      spans[0].textContent = targetText;
+      spans[0].innerHTML = `<font style="vertical-align: inherit;"><font style="vertical-align: inherit;">${this.escapeHtml(targetText)}</font></font>`;
       for (let i = 1; i < spans.length; i++) {
-        spans[i].textContent = '';
+        spans[i].innerHTML = '';
       }
     } else {
-      rowDiv.textContent = targetText;
+      rowDiv.innerHTML = `<font style="vertical-align: inherit;"><font style="vertical-align: inherit;">${this.escapeHtml(targetText)}</font></font>`;
     }
+  }
+
+  private escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }
