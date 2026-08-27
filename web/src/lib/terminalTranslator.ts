@@ -4,11 +4,11 @@ import { DEV_TOOL_EXACT_DICT, DEV_TOOL_TEMPLATES } from '@termux-webui/shared';
 export type TranslateFunction = (text: string) => Promise<string>;
 
 /**
- * Clean & Ghost-Free Stream Terminal Translator
- * 1. 0 Token Fragmentation: Strictly preserves natural stream flow
- * 2. 0 Internal \x1b[K Pollution: Eliminates flicker and trailing ghost artifacts
- * 3. URL & Path Shielding (100% immune to link mistranslation)
- * 4. Fast Microsecond Greedy Phrase Replacement
+ * Industrial Stream Terminal Translator with Word-Boundary Protection
+ * 1. Word Boundary & Hyphen Immunity: Prevents broken tokens like "scoped-模型s"
+ * 2. Strict CJK Single-Line Balance: Ensures Inquirer/Ink ANSI cursor positioning is 100% accurate
+ * 3. URL & Path Shielding: 100% immune to link mistranslation
+ * 4. Microsecond Fast Zero-Flicker Stream Pipeline
  */
 export class TerminalTranslator {
   private term: Terminal;
@@ -34,20 +34,24 @@ export class TerminalTranslator {
   }
 
   /**
-   * Rebuilds search index sorted by phrase length descending for longest-match-first.
+   * Rebuilds search index with strict word-boundary protection.
+   * Prevents sub-word mutilation (e.g. scoped-models -> scoped-模型s).
    */
   private rebuildPhraseIndex(dict: Record<string, string>): void {
     this.exactDictMap.clear();
-    const list: Array<{ raw: string; rawLen: number; target: string }> = [];
+    const list: Array<{ raw: string; rawLen: number; target: string; isWord: boolean }> = [];
 
     for (const [k, v] of Object.entries(dict)) {
       const trimmed = k.trim();
       if (trimmed.length < 2) continue;
       this.exactDictMap.set(trimmed.toLowerCase(), v);
+
+      const isWord = /^[a-zA-Z0-9_-]+$/.test(trimmed) && !trimmed.startsWith('/');
       list.push({
         raw: trimmed,
         rawLen: trimmed.length,
         target: v,
+        isWord,
       });
     }
 
@@ -55,8 +59,13 @@ export class TerminalTranslator {
 
     this.sortedPhrases = list.map((item) => {
       const escaped = item.raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // If it's a pure identifier/word, enforce non-word/non-hyphen boundaries
+      const patternStr = item.isWord
+        ? `(?<=^|[^a-zA-Z0-9_-])${escaped}(?=$|[^a-zA-Z0-9_-])`
+        : escaped;
+
       return {
-        pattern: new RegExp(escaped, 'gi'),
+        pattern: new RegExp(patternStr, 'gi'),
         rawLen: item.rawLen,
         target: item.target,
       };
@@ -99,7 +108,7 @@ export class TerminalTranslator {
   }
 
   /**
-   * Transforms stream chunk safely without breaking ANSI codes or injecting internal erase artifacts.
+   * Transforms stream chunk safely without breaking ANSI codes or subwords.
    */
   private transformStream(chunk: string): string {
     if (!/[A-Za-z]{2,}/.test(chunk)) {
@@ -177,15 +186,15 @@ export class TerminalTranslator {
         token = token.split(pathId).join(shields[sIdx]);
       }
 
-      // Pure clean assignment - NO internal \x1b[K injection that destroys trailing tokens
       tokens[i] = token;
 
-      // Background learn for unmatched text
+      // Background learn for standalone english phrases (must not be hyphenated code identifiers)
       const finalTrimmed = token.trim();
       if (
         shields.length === 0 &&
         finalTrimmed.length >= 4 &&
-        finalTrimmed.length <= 100 &&
+        finalTrimmed.length <= 80 &&
+        finalTrimmed.includes(' ') && // Only learn multi-word phrases to avoid corrupting code variables
         !finalTrimmed.startsWith('--') &&
         !/^[0-9a-f]{7,40}$/i.test(finalTrimmed)
       ) {

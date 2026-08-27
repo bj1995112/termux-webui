@@ -273,7 +273,15 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   '/history': '/历史 (history) 历史执行',
   '/prune': '/清理 (prune) 清理缓存',
 
-  // === 5. Interactive Menus & CLI Questions ===
+  // === 5. Common CLI Menu Terms (Strict Full-Word) ===
+  'scoped-models': '作用域模型 (scoped-models)',
+  'models': '模型列表',
+  'model': '模型',
+  'settings': '设置',
+  'export': '导出',
+  'import': '导入',
+
+  // === 6. Interactive Menus & CLI Questions ===
   '? Project name:': '? 项目名称：',
   '? Select a framework:': '? 选择框架：',
   '? Select a variant:': '? 选择语言变体：',
