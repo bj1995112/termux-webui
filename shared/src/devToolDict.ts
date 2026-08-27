@@ -1,64 +1,75 @@
 /**
  * Comprehensive Developer IT & CLI Terminology Dictionary
- * Covers Codex, Claude Code, Aider, Vite, Next.js, Vue, React, Bun, uv, Rust Cargo, Python, Docker, Git, Linux.
- * Supports 0ms zero-latency exact match & dynamic template interpolation.
+ * Covers Claude Code, OpenAI Codex, Cursor, Aider, OpenCode, Hermes, Pi, Vite, Next.js, Vue, React, Bun, Rust Cargo, Python, Docker, Git, Linux.
  */
 
-export interface DictEntry {
-  original: string;
-  translated: string;
-  category?: 'ai_cli' | 'scaffold' | 'git' | 'linux' | 'package_mgr' | 'compiler' | 'database' | 'general';
-}
-
 export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
-  // === 1. AI CLI Assistants (Claude Code, OpenAI Codex, Aider, Cursor, Copilot) ===
-  '/plan': '/plan 切换到规划模式 (Plan Mode)',
-  '/goal': '/goal 设置或查看长时间运行任务的目标',
-  '/agents': '/agents 查看并在所有活跃的 Agent 会话间切换',
-  '/side': '/side 在临时分支中开启副对话',
-  '/copy': '/copy 复制最新回复、代码块或引用',
-  '/export': '/export 将对话导出为 Markdown 文档',
-  '/raw': '/raw 切换便于复制的原生纯文本回滚模式',
-  '/diff': '/diff 查看 Git 变更对比 (含未跟踪文件)',
-  '/skills': '/skills 列出可用技能库或调度指定技能',
-  '/model': '/model 切换底层大模型',
-  '/help': '/help 查看帮助与可用命令列表',
-  '/clear': '/clear 清屏并重置当前对话上下文',
-  '/undo': '/undo 撤销上一步代码变更',
-  '/test': '/test 运行自动化测试套件',
-  '/commit': '/commit 智能生成提交信息并执行 Git 提交',
-  '/compact': '/compact 压缩对话历史以释放上下文空间',
-  '/context': '/context 查看当前上下文 Token 占用可视化图表',
-  '/rewind': '/rewind 撤销代码变更并回退到上一个检查点',
-  '/checkpoint': '/checkpoint 查看或创建会话快照检查点',
-  '/btw': '/btw 快速向 AI 提问副问题 (不占用主上下文)',
-  '/chat-mode': '/chat-mode 切换对话模式 (代码/提问/架构/帮助)',
-  '/add': '/add 将指定文件添加到 AI 对话上下文中',
-  '/drop': '/drop 从 AI 对话上下文中移除指定文件',
-  '/map': '/map 打印当前代码仓库的完整依赖拓扑结构图',
-  'switch to Plan mode': '切换到规划模式 (Plan Mode)',
-  'set or view the goal for a long-running task': '设置或查看长时间运行任务的目标',
-  'view and switch between all active agent': '查看并在所有活跃的 Agent 会话间切换',
-  'sessions': '会话列表',
-  'start a side conversation in an ephemeral': '在临时分支中开启副对话',
-  'fork': '派生分支',
-  'copy the last response, code block, or quote': '复制最新回复、代码块或引用',
-  'export the conversation as markdown': '将对话导出为 Markdown 文档',
-  'toggle raw scrollback mode for copy-friendly': '切换便于复制的原生纯文本回滚模式',
-  'terminal selection': '终端选区',
-  'show git diff (including untracked files)': '查看 Git 变更对比 (含未跟踪文件)',
-  'list available skills or ask Codex to use one': '列出可用技能库或调度指定技能',
-  'to change': '以切换',
-  'Tip: New Build faster with Codex.': '提示：使用 Codex 助您更高效地构建项目。',
-  'Tip: Use /skills to list available skills or ask Codex to': '提示：使用 /skills 列出可用技能或让 Codex 调度技能。',
-  'Ask Codex to do anything': '输入指令，让 Codex 为您完成任何开发任务',
-  'Context 0% used': '上下文已使用 0%',
-  'Please select an option': '请选择一个选项',
-  'Please select your preferred framework': '请选择您偏好的前端框架',
-  'Applying patch to...': '正在将 AI 生成的代码补丁应用到文件...',
-  'Reject change [y/n/e]?': '是否拒绝此代码更改 [y(是)/n(否)/e(手动编辑)]?',
+  // === 1. Claude Code CLI All Slash Commands ===
+  '/clear': '/clear 清空对话历史并重置当前上下文 (开启新任务)',
+  '/compact': '/compact 智能压缩对话历史以大幅释放上下文空间',
+  '/context': '/context 查看当前上下文 Token 占用可视化图表与优化建议',
+  '/resume': '/resume 恢复并继续之前的交互式会话',
+  '/fork': '/fork 派生当前会话创建独立分支副本',
+  '/init': '/init 在当前工程中自动分析并生成 CLAUDE.md 项目规范',
+  '/plan': '/plan 切换到规划模式 (Plan Mode，仅分析不修改文件)',
+  '/status': '/status 查看当前活跃工具、上下文文件与系统状态',
+  '/diff': '/diff 查看 Git 代码变更对比 (含未跟踪的新增文件)',
+  '/model': '/model 切换或查看当前底层大模型',
+  '/mcp': '/mcp 配置、管理或连接 MCP (Model Context Protocol) 插件服务',
+  '/permissions': '/permissions 管理工具调用与命令执行的安全授权白名单',
+  '/cost': '/cost 查看当前会话累计消耗的 Token 用量与账单成本',
+  '/config': '/config 查看或修改当前工具链全局配置项',
+  '/doctor': '/doctor 运行系统与运行环境健康诊断检查',
+  '/bug': '/bug 提交问题反馈与运行日志',
+  '/login': '/login 登录并验证账号身份认证凭据',
+  '/logout': '/logout 退出登录并清除本地授权凭据',
+  '/pr': '/pr 创建或审查 GitHub Pull Request 代码合并请求',
+  '/review': '/review 对当前 Git 分支代码变更进行全方位质量审查',
+  '/security': '/security 扫描项目依赖与代码安全漏洞',
+  '/terminal': '/terminal 打开或切换内嵌终端执行上下文',
 
-  // === 2. Modern Frontend & Scaffolding (Create-Vite, Next, Vue, React, Bun, Inquirer) ===
+  // === 2. Aider CLI All Slash Commands ===
+  '/add': '/add 将指定文件或目录添加到 AI 编码上下文中',
+  '/drop': '/drop 从 AI 编码上下文中移除指定文件',
+  '/ls': '/ls 列出当前会话已加载的所有文件清单',
+  '/map': '/map 打印当前代码仓库的完整依赖拓扑结构图',
+  '/code': '/code 切换为代码编写模式 (默认自动应用代码修改)',
+  '/ask': '/ask 切换为只读答疑模式 (只回答问题，不修改代码)',
+  '/architect': '/architect 切换为系统架构模式 (先给出设计方案再实施)',
+  '/help': '/help 查看帮助与可用命令详细列表',
+  '/commit': '/commit 智能生成精准提交信息并执行 Git 提交',
+  '/undo': '/undo 撤销上一步 AI 所做的代码修改并回滚文件',
+  '/git': '/git 在会话内直接执行 Git 原生命令',
+  '/run': '/run 在会话内直接执行 Shell 终端命令',
+  '/tokens': '/tokens 查看当前上下文 Token 消耗明细与统计',
+  '/web': '/web 抓取并解析网页内容作为上下文参考',
+  '/read-only': '/read-only 将指定文件设置为只读上下文 (AI 不得修改)',
+  '/voice': '/voice 开启语音输入转文字交互',
+
+  // === 3. OpenAI Codex CLI All Slash Commands ===
+  '/goal': '/goal 设置或查看长时间运行自主任务的终极目标',
+  '/agents': '/agents 查看并在所有活跃的 Agent 智能体间切换',
+  '/side': '/side 在临时沙箱分支中开启独立副对话',
+  '/copy': '/copy 复制最新回复内容、代码块或引用片段',
+  '/export': '/export 将完整对话记录导出为标准 Markdown 文档',
+  '/raw': '/raw 切换便于复制的原生纯文本回滚模式',
+  '/skills': '/skills 列出可用技能库或指示 Codex 调度指定技能',
+  '/test': '/test 运行当前工程的自动化测试套件',
+  '/reset': '/reset 重置会话与运行环境状态',
+  '/share': '/share 生成当前会话的在线分享链接',
+
+  // === 4. Cursor & OpenCode All Slash Commands ===
+  '/edit': '/edit 打开外部编辑器进行长文本编辑与微调',
+  '/connect': '/connect 连接或配置自定义 AI 模型提供商与 API 密钥',
+  '/debug': '/debug 自动捕获报错堆栈并进行代码根因调试分析',
+  '/rename': '/rename 重命名当前会话标题',
+  '/summarize': '/summarize 提取当前对话关键摘要并归档',
+  '/rules': '/rules 查看或编辑当前项目的 AI 行为准则 (.cursorrules)',
+  '/shell': '/shell 在沙箱环境中执行终端指令',
+  '/exit': '/exit 退出并关闭当前交互式会话',
+  '/quit': '/quit 退出当前程序',
+
+  // === 5. Modern Frontend & Scaffolding (Create-Vite, Next, Vue, React, Bun) ===
   '? Project name:': '? 项目名称：',
   '? Select a framework:': '? 请选择前端框架：',
   '? Select a variant:': '? 请选择开发语言变体 (TypeScript / JavaScript)：',
@@ -99,7 +110,7 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'press o to open in browser': '按 o 在默认浏览器中打开',
   'press c to clear console': '按 c 清空控制台屏幕',
 
-  // === 3. Git Version Control System ===
+  // === 6. Git Version Control System ===
   'On branch main': '位于分支 main',
   'On branch master': '位于分支 master',
   'Your branch is up to date with': '您的分支已与远程分支保持最新',
@@ -122,7 +133,7 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'all conflicts fixed: run "git rebase --continue"': '所有冲突已解决：请执行 "git rebase --continue" 继续',
   'git push --set-upstream origin': '请使用 git push --set-upstream origin 建立上游关联',
 
-  // === 4. Rust Compiler & Toolchain (Cargo, rustc, Clippy) ===
+  // === 7. Rust Compiler & Toolchain ===
   'borrow of moved value': '借用了已被移动所有权的值 (所有权冲突)',
   'cannot borrow as mutable more than once at a time': '同一时间不能对同一变量进行多次可变借用',
   'lifetime may not live long enough': '生命周期可能不够长 (变量存活期超出预期)',
@@ -130,18 +141,10 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'consider borrowing here': '建议：在此处使用引用 (&) 进行借用',
   'cargo clippy --fix': '自动应用 Clippy 建议的代码优化补丁',
 
-  // === 5. Python & Backend Frameworks (FastAPI, Pytest, Uvicorn, Poetry) ===
+  // === 8. Python, Docker, Linux Core ===
   'Application startup complete.': '应用程序启动完成，已进入就绪监听状态',
   'Waiting for application shutdown.': '正在等待应用程序安全关闭并释放连接池...',
   'RuntimeError: Event loop is closed': '运行时错误：AsyncIO 异步事件循环已提前关闭',
-
-  // === 6. Docker & Containers ===
-  'Container Creating': '容器正在创建中...',
-  'Container Started': '容器已成功启动',
-  'Container Healthy': '容器健康检查通过 (服务正常运行)',
-  'Cannot connect to the Docker daemon': '无法连接到 Docker 守护进程 (请确认 Docker 服务已启动)',
-
-  // === 7. Linux Core, System & Network ===
   'Permission denied': '权限被拒绝 (请检查文件读写执行权限或使用 sudo/su)',
   'No such file or directory': '没有该文件或目录 (请检查路径拼写)',
   'Command not found': '未找到该命令 (请检查拼写或使用 apt install 安装)',
@@ -153,63 +156,37 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'Name or service not known': '域名解析失败或 DNS 服务不可达',
   'Temporary failure in name resolution': 'DNS 域名解析暂时性失败 (请检查 /etc/resolv.conf)',
   'No route to host': '无通往目标主机的网络路由 (对端离线或防火墙阻断)',
-  'File exists': '文件已存在',
-  'Directory not empty': '目录非空',
-  'Is a directory': '这是一个目录',
-  'Not a directory': '这不是一个目录',
-  'Read-only file system': '只读文件系统',
-  'No space left on device': '磁盘空间已耗尽',
-  'Operation not permitted': '操作不被允许',
-  'Resource temporarily unavailable': '系统资源暂时不可用',
-  'Segmentation fault (core dumped)': '段错误 (内存非法访问，核心已转储)',
-  'npm ERR!': 'npm 报错',
-  'found 0 vulnerabilities': '已完成安全审计：未发现安全漏洞',
-  'run `npm audit fix` to fix them, or `npm audit` for details': '执行 `npm audit fix` 可自动修复已知安全漏洞',
-  'Lockfile is up to date': 'Lock 依赖版本锁文件已是最新',
-  'Packages are up to date': '所有软件包已是最新版本',
-  'Requirement already satisfied:': '依赖项已满足：',
-  'Successfully installed': '成功安装软件包',
-  'Compiling': '正在编译',
-  'Finished dev [unoptimized + debuginfo]': '构建完成 (开发调试版本)',
-  'Finished release [optimized]': '构建完成 (发布优化版本)',
 };
 
-/** Dynamic Template RegEx Replacers for numeric / variable strings */
+/** Dynamic Template RegEx Replacers */
 export const DEV_TOOL_TEMPLATES: Array<{ pattern: RegExp; replace: (...args: string[]) => string }> = [
   {
-    // added 52 packages in 1.2s
     pattern: /^added\s+(\d+)\s+packages?(?:\s+and\s+audited\s+(\d+)\s+packages?)?\s+in\s+([\d.]+)(m?s)/i,
     replace: (_, added, audited, time, unit) =>
       `成功安装了 ${added} 个软件包${audited ? ` (并审计了 ${audited} 个包)` : ''}，耗时 ${time}${unit}`,
   },
   {
-    // ready in 250 ms
     pattern: /^ready\s+in\s+([\d.]+)\s*(m?s)/i,
     replace: (_, time, unit) => `启动就绪，耗时 ${time} ${unit}`,
   },
   {
-    // found X vulnerabilities (Y moderate, Z high)
     pattern: /^found\s+(\d+)\s+vulnerabilit(?:y|ies)(?:\s*\((.*?)\))?/i,
     replace: (_, count, details) =>
       `发现 ${count} 个安全漏洞${details ? ` (${details})` : ''}`,
   },
   {
-    // Context 25% used
     pattern: /^Context\s+(\d+)%\s+used/i,
     replace: (_, percent) => `上下文已使用 ${percent}%`,
   },
   {
-    // Tokens: 1250 / 8000 used (15%)
     pattern: /^Tokens:\s*([\d,]+)\s*\/\s*([\d,]+)\s+used\s*\(([\d.]+)%\)/i,
     replace: (_, used, total, pct) => `Token 用量：${used} / ${total} 已使用 (${pct}%)`,
   },
   {
-    // Building for production...
     pattern: /^Building for production\.{3}/i,
     replace: () => '正在进行生产环境全量打包编译...',
   },
   {
-    // HMR update /src/App.tsx
     pattern: /^HMR update\s+(.+)$/i,
     replace: (_, file) => `模块热替换 (HMR)：已更新 ${file}`,
   },

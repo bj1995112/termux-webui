@@ -185,7 +185,12 @@ export class TerminalTranslator {
         token = token.split(pathId).join(shields[sIdx]);
       }
 
-      tokens[i] = token;
+      // If token was translated, append erase-to-end-of-line (\x1b[K) to clean any trailing ghost cells
+      if (token !== tokens[i] && !token.includes('\x1b[K')) {
+        tokens[i] = token + '\x1b[K';
+      } else {
+        tokens[i] = token;
+      }
 
       // 4. Background learn for unmatched standalone text
       const finalTrimmed = token.trim();
