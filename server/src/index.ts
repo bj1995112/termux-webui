@@ -11,6 +11,7 @@ import { SessionManager } from './sessions.js';
 import { listAllConversations, deleteConversation, getConversationDetail } from './history.js';
 import { checkPassword, createToken, verifyToken, revokeToken } from './auth.js';
 import { translateText } from './translator.js';
+import { learnedDict } from './learnedDict.js';
 
 const PORT = Number(process.env.PORT || 4150);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -144,6 +145,46 @@ app.post('/api/translate', async (c) => {
   const toLang = body?.to || 'zh-CN';
   const result = await translateText(text, toLang, body?.config);
   return c.json(result, result.ok ? 200 : 502);
+});
+
+// --- Dictionary Management API ---
+app.get('/api/dictionary', (c) => {
+  const entries = learnedDict.getAll();
+  return c.json({
+    ok: true,
+    totalLearned: entries.length,
+    builtinCount: 2580,
+    entries,
+  });
+});
+
+app.post('/api/dictionary/entry', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { original?: string; translated?: string; category?: string } | null;
+  if (!body?.original || !body?.translated) {
+    return c.json({ error: 'original and translated required' }, 400);
+  }
+  learnedDict.setManual(body.original, body.translated, body.category || 'custom');
+  return c.json({ ok: true });
+});
+
+app.delete('/api/dictionary/entry', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { original?: string } | null;
+  if (!body?.original) return c.json({ error: 'original required' }, 400);
+  const deleted = learnedDict.delete(body.original);
+  return c.json({ ok: true, deleted });
+});
+
+app.post('/api/dictionary/import', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { entries?: any[] } | null;
+  if (!Array.isArray(body?.entries)) return c.json({ error: 'entries array required' }, 400);
+  const importedCount = learnedDict.importEntries(body.entries);
+  return c.json({ ok: true, importedCount });
+});
+
+app.get('/api/dictionary/export', (c) => {
+  const list = learnedDict.getAll();
+  c.header('Content-Disposition', 'attachment; filename="learned_dict_backup.json"');
+  return c.json(list);
 });
 
 app.delete('/api/sessions/:id', (c) => {

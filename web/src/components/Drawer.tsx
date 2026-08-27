@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useDeck } from '../store.js';
 import type { AgentConversation, CliId } from '@termux-webui/shared';
 import { THEMES, type ThemeId } from '../theme.js';
+import { DictionaryManagerDialog } from './DictionaryManagerDialog.js';
 
 interface Props {
   open: boolean;
@@ -122,6 +123,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   const [openHistory, setOpenHistory] = useState(false);
   const [openTheme, setOpenTheme] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
+  const [openDictManager, setOpenDictManager] = useState(false);
 
   // History filtering & search
   const [activeCliFilter, setActiveCliFilter] = useState<'all' | CliId>('all');
@@ -782,6 +784,22 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                       </div>
                     </div>
                   )}
+                  {/* 📚 离线词库与自学习管理面板入口 */}
+                  <div className="pt-2 border-t border-border/40">
+                    <button
+                      type="button"
+                      onClick={() => setOpenDictManager(true)}
+                      className="flex w-full items-center justify-between rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-bold text-accent hover:bg-accent/20 active:scale-95 transition-all shadow-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">📚</span>
+                        <span>编程词典与自学习管理</span>
+                      </div>
+                      <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">
+                        2,580+ 词条
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* 登出 / 锁定 */}
@@ -805,6 +823,9 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
           </div>
         </div>
       </aside>
+
+      {/* 📚 独立编程词典与自学习管理弹窗 */}
+      <DictionaryManagerDialog open={openDictManager} onClose={() => setOpenDictManager(false)} />
     </div>
   );
 }

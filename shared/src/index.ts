@@ -123,3 +123,5 @@ export interface TranslateResponse {
   cached?: boolean;
   error?: string;
 }
+
+export * from './devToolDict.js';

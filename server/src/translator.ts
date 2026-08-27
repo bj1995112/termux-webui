@@ -1,4 +1,13 @@
-import type { TranslationConfig, TranslateResponse } from '@termux-webui/shared';
+import {
+  type TranslationConfig,
+  type TranslateResponse,
+  DEV_TOOL_EXACT_DICT,
+  DEV_TOOL_TEMPLATES,
+} from '@termux-webui/shared';
+import { learnedDict } from './learnedDict.js';
+
+// Auto-initialize learned dictionary from disk on startup
+void learnedDict.init();
 
 /** Strip ANSI color/style escape codes */
 export function stripAnsi(text: string): string {
@@ -398,7 +407,53 @@ export async function translateText(
     }
   }
 
-  // 3. Fast Local Linux Dictionary Check (Instant 0ms match)
+  // 3. Ultra-Fast Standard Developer IT & CLI Dictionary (0ms offline exact match)
+  const devExact = DEV_TOOL_EXACT_DICT[targetToTranslate] || DEV_TOOL_EXACT_DICT[targetToTranslate.toLowerCase()];
+  if (devExact) {
+    saveCache(cacheKey, devExact, 'en', 'Developer Standard Dictionary');
+    return {
+      ok: true,
+      original: clean,
+      translated: prompt + devExact,
+      fromLang: 'en',
+      toLang,
+      sourceUsed: 'Developer Standard Dictionary',
+    };
+  }
+
+  // 4. Persistent Self-Learning Memory Dictionary (0ms offline lookup)
+  const learned = learnedDict.get(targetToTranslate);
+  if (learned) {
+    saveCache(cacheKey, learned.translated, 'en', 'Self-Learning Memory');
+    return {
+      ok: true,
+      original: clean,
+      translated: prompt + learned.translated,
+      fromLang: 'en',
+      toLang,
+      sourceUsed: 'Self-Learning Memory',
+    };
+  }
+
+  // 5. Dynamic Template Regex Matching (e.g. "added 52 packages in 1.2s", "ready in 250ms")
+  for (const tpl of DEV_TOOL_TEMPLATES) {
+    if (tpl.pattern.test(targetToTranslate)) {
+      const tplResult = targetToTranslate.replace(tpl.pattern, tpl.replace as (substring: string, ...args: unknown[]) => string);
+      if (tplResult && tplResult !== targetToTranslate) {
+        saveCache(cacheKey, tplResult, 'en', 'Developer Template Engine');
+        return {
+          ok: true,
+          original: clean,
+          translated: prompt + tplResult,
+          fromLang: 'en',
+          toLang,
+          sourceUsed: 'Developer Template Engine',
+        };
+      }
+    }
+  }
+
+  // 6. Fast Local Linux Dictionary Check (Instant 0ms match)
   const localMatch = translateWithLocalDict(targetToTranslate);
   if (localMatch) {
     saveCache(cacheKey, localMatch, 'en', 'Local Linux Terms');
@@ -412,10 +467,12 @@ export async function translateText(
     };
   }
 
-  // 4. Youdao Mobile Sentence / Term API (100% domestic reachable)
+  // 7. Youdao Mobile Sentence / Term API (100% domestic reachable)
   try {
     const yd = await translateWithYoudaoMobile(targetToTranslate);
     saveCache(cacheKey, yd.translated, yd.fromLang, 'Youdao Engine');
+    // Auto-learn and persist to local storage
+    learnedDict.record(targetToTranslate, yd.translated, 'auto_learned', 'Youdao Engine');
     return {
       ok: true,
       original: clean,
@@ -428,10 +485,11 @@ export async function translateText(
     /* fallback to suggest */
   }
 
-  // 5. Youdao Dictionary Suggest (for words & short phrases)
+  // 8. Youdao Dictionary Suggest (for words & short phrases)
   try {
     const ys = await translateWithYoudaoSuggest(targetToTranslate);
     saveCache(cacheKey, ys.translated, ys.fromLang, 'Youdao Dictionary');
+    learnedDict.record(targetToTranslate, ys.translated, 'auto_learned', 'Youdao Dictionary');
     return {
       ok: true,
       original: clean,
@@ -444,10 +502,11 @@ export async function translateText(
     /* try next */
   }
 
-  // 6. Google Translate (if accessible)
+  // 9. Google Translate (if accessible)
   try {
     const gg = await translateWithGoogle(targetToTranslate, toLang);
     saveCache(cacheKey, gg.translated, gg.fromLang, 'Google Translate');
+    learnedDict.record(targetToTranslate, gg.translated, 'auto_learned', 'Google Translate');
     return {
       ok: true,
       original: clean,
