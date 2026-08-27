@@ -217,10 +217,13 @@ export default function GlyphMirrorOverlay({ term, onClose }: Props) {
           position: 'absolute',
           top: `${geometry.top}px`,
           left: `${geometry.left}px`,
+          right: 0,
+          bottom: 0,
           fontSize: `${fontSize}px`,
+          lineHeight: `${geometry.cellHeight}px`,
           fontFamily: '"JetBrains Mono", "Roboto Mono", "Fira Code", ui-monospace, Menlo, Monaco, monospace',
         }}
-        className="pointer-events-none overflow-hidden"
+        className="pointer-events-none overflow-hidden select-none"
       >
         {rows.map((r) => {
           const isBlank = !r.originalText.trim();
@@ -242,7 +245,8 @@ export default function GlyphMirrorOverlay({ term, onClose }: Props) {
                 height: `${geometry.cellHeight}px`,
                 lineHeight: `${geometry.cellHeight}px`,
                 color: 'var(--text, #c0caf5)',
-                backgroundColor: 'rgba(26, 27, 38, 0.96)',
+                backgroundColor: 'rgba(26, 27, 38, 0.98)',
+                zIndex: 25,
               }}
               className="whitespace-pre truncate px-0.5 rounded-sm select-none"
             >
