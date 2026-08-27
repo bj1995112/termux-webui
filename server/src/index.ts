@@ -8,7 +8,8 @@ import { CliId, ClientMessage, type CreateSessionBody, type ServerMessage } from
 import { listClis } from './clis.js';
 import { listProjects } from './projects.js';
 import { SessionManager } from './sessions.js';
-import { listAllConversations, deleteConversation } from './history.js';
+import { listAllConversations, deleteConversation, getConversationDetail } from './history.js';
+import { checkPassword, createToken, verifyToken, revokeToken } from './auth.js';
 
 const PORT = Number(process.env.PORT || 4150);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -19,6 +20,49 @@ export const manager = new SessionManager();
 
 const app = new Hono();
 
+// Auth Endpoints
+app.get('/api/auth/status', (c) => c.json({ authRequired: true }));
+
+app.post('/api/auth/login', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { password?: string } | null;
+  const password = body?.password || '';
+  if (!checkPassword(password)) {
+    return c.json({ ok: false, error: '密码错误' }, 401);
+  }
+  const token = createToken();
+  return c.json({ ok: true, token });
+});
+
+app.post('/api/auth/logout', async (c) => {
+  const authHeader = c.req.header('authorization') || c.req.header('x-auth-token') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (token) revokeToken(token);
+  return c.json({ ok: true });
+});
+
+app.get('/api/auth/verify', (c) => {
+  const authHeader = c.req.header('authorization') || c.req.header('x-auth-token') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (verifyToken(token)) {
+    return c.json({ ok: true });
+  }
+  return c.json({ ok: false }, 401);
+});
+
+// Authentication middleware for all other /api/* routes
+app.use('/api/*', async (c, next) => {
+  const url = new URL(c.req.url);
+  if (url.pathname.startsWith('/api/auth/')) {
+    return next();
+  }
+  const authHeader = c.req.header('authorization') || c.req.header('x-auth-token') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!verifyToken(token)) {
+    return c.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, 401);
+  }
+  return next();
+});
+
 app.get('/api/health', (c) => c.json({ ok: true }));
 app.get('/api/clis', (c) => c.json(listClis()));
 app.get('/api/projects', (c) => c.json(listProjects()));
@@ -27,6 +71,14 @@ app.get('/api/sessions', (c) => c.json(manager.list()));
 app.get('/api/history', async (c) => {
   const history = await listAllConversations();
   return c.json(history);
+});
+
+app.get('/api/history/:cli/:id/detail', async (c) => {
+  const cli = c.req.param('cli') as CliId;
+  const id = c.req.param('id');
+  const detail = await getConversationDetail(cli, id);
+  if (!detail) return c.json({ error: 'not found' }, 404);
+  return c.json(detail);
 });
 
 app.delete('/api/history/:cli/:id', async (c) => {
@@ -76,11 +128,16 @@ app.post('/api/sessions/resume', async (c) => {
   return c.json(manager.create(cli, body.cwd, args), 201);
 });
 
+app.post('/api/sessions/:id/restart', (c) => {
+  const info = manager.restart(c.req.param('id'));
+  if (!info) return c.json({ error: 'no such session' }, 404);
+  return c.json(info);
+});
+
 app.delete('/api/sessions/:id', (c) => {
   const ok = manager.kill(c.req.param('id'));
   return c.json({ ok }, ok ? 200 : 404);
 });
-
 
 // --- Static web dist ----------------------------------------------------------
 
@@ -91,6 +148,7 @@ const MIME: Record<string, string> = {
   '.js': 'text/javascript',
   '.css': 'text/css',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
@@ -104,8 +162,6 @@ app.get('*', (c) => {
   if (!file.startsWith(dist)) return c.text('forbidden', 403);
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');
   if (!fs.existsSync(file)) return c.text('not found', 404);
-  // index.html must never be cached: it references hashed assets that get
-  // deleted on the next build, and a stale copy bricks the page.
   const headers: Record<string, string> = { 'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream' };
   if (file.endsWith('.html') || file.endsWith('index.html')) {
     headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
@@ -176,7 +232,6 @@ function handleClient(socket: HeartbeatWebSocket, raw: string) {
             exitUnsubs.get(msg.sessionId)?.();
             unsubs.delete(msg.sessionId);
             exitUnsubs.delete(msg.sessionId);
-            attached.delete(msg.sessionId);
           }),
         );
       }
@@ -184,11 +239,9 @@ function handleClient(socket: HeartbeatWebSocket, raw: string) {
       send(socket, {
         type: 'attached',
         sessionId: msg.sessionId,
-        cols: session.pty.cols,
-        rows: session.pty.rows,
+        cols: session.pty?.cols || 80,
+        rows: session.pty?.rows || 24,
       });
-      // Replay the rolling buffer so the new socket sees the prompt and all
-      // output produced before it attached (page reloads included).
       const snapshot = manager.snapshot(msg.sessionId);
       if (snapshot) send(socket, { type: 'output', sessionId: msg.sessionId, data: snapshot });
       break;
@@ -215,8 +268,6 @@ wss.on('connection', (socket: HeartbeatWebSocket) => {
   socket.on('message', (raw) => handleClient(socket, raw as Buffer));
   socket.on('close', () => {
     sockets.delete(socket);
-    // Drop the dead socket from every session so future attaches replay
-    // cleanly and closed sockets never receive output.
     for (const set of attached.values()) set.delete(socket);
   });
 });
@@ -239,8 +290,17 @@ heartbeatInterval.unref();
 const server = serve({ fetch: app.fetch, port: PORT, hostname: HOST }, (info) => {
   console.log(`[termux-webui] http://${HOST}:${info.port}`);
 });
+
 server.on('upgrade', (req, socket, head) => {
-  if (new URL(req.url ?? '/', 'http://localhost').pathname !== '/ws') return socket.destroy();
+  const reqUrl = new URL(req.url ?? '/', 'http://localhost');
+  if (reqUrl.pathname !== '/ws') return socket.destroy();
+
+  // Validate token from query string ?token=... or header
+  const token = reqUrl.searchParams.get('token') || (req.headers['sec-websocket-protocol'] as string) || '';
+  if (!verifyToken(token)) {
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    return socket.destroy();
+  }
+
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
-

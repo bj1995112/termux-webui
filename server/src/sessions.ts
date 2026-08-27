@@ -7,7 +7,8 @@ import type { CliId, SessionInfo } from '@termux-webui/shared';
 import { commandFor } from './clis.js';
 
 export interface Session extends SessionInfo {
-  pty: IPty;
+  pty?: IPty;
+  extraEnv?: Record<string, string>;
 }
 
 const DEFAULT_CWD = process.env.AGENTDECK_HOME || homedir();
@@ -22,13 +23,12 @@ export class SessionManager {
   /** output listeners keyed by sessionId */
   private listeners = new Map<string, Set<(data: string) => void>>();
   private exitListeners = new Map<string, Set<(code: number) => void>>();
-  /** rolling output buffer per session, replayed on attach so late joiners
-   * (and page reloads) see the prompt and everything before them. */
+  /** rolling output buffer per session */
   private buffers = new Map<string, string>();
   private static MAX_BUFFER = 128 * 1024;
 
-  create(kind: CliId, cwd?: string, extraArgs?: string[], extraEnv?: Record<string, string>): SessionInfo {
-    const id = randomUUID();
+  create(kind: CliId, cwd?: string, extraArgs?: string[], extraEnv?: Record<string, string>, existingId?: string): SessionInfo {
+    const id = existingId || randomUUID();
     const dir = resolveCwd(cwd);
     const { file, args } = commandFor(kind, extraArgs);
     const env = {
@@ -36,7 +36,6 @@ export class SessionManager {
       ...(extraEnv ?? {}),
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      // Let TUIs know the host so paste/links behave.
       LANG: process.env.LANG || 'C.UTF-8',
     };
     const pty = spawn(file, args, {
@@ -46,6 +45,7 @@ export class SessionManager {
       cwd: dir,
       env,
     });
+
     const session: Session = {
       id,
       kind,
@@ -53,10 +53,13 @@ export class SessionManager {
       createdAt: Date.now(),
       status: 'running',
       args: extraArgs && extraArgs.length > 0 ? extraArgs : undefined,
+      extraEnv,
       pty,
     };
     this.sessions.set(id, session);
-    this.buffers.set(id, '');
+    if (!existingId) {
+      this.buffers.set(id, '');
+    }
 
     pty.onData((data) => {
       let buf = (this.buffers.get(id) ?? '') + data;
@@ -66,16 +69,30 @@ export class SessionManager {
       this.buffers.set(id, buf);
       for (const fn of this.listeners.get(id) ?? []) fn(data);
     });
+
     pty.onExit(({ exitCode }) => {
       session.status = 'exited';
       session.exitCode = exitCode;
+      session.pty = undefined;
       for (const fn of this.exitListeners.get(id) ?? []) fn(exitCode);
-      this.cleanup(id);
     });
 
     const { pty: _pty, ...info } = session;
     void _pty;
     return info;
+  }
+
+  restart(id: string): SessionInfo | null {
+    const s = this.sessions.get(id);
+    if (!s) return null;
+    if (s.pty) {
+      try {
+        s.pty.kill();
+      } catch {
+        /* ignore */
+      }
+    }
+    return this.create(s.kind, s.cwd, s.args, s.extraEnv, s.id);
   }
 
   get(id: string): Session | undefined {
@@ -91,14 +108,14 @@ export class SessionManager {
 
   write(id: string, data: string): boolean {
     const session = this.sessions.get(id);
-    if (!session) return false;
-    session.pty.write(data); // node-pty's write returns void — success = no throw
+    if (!session || !session.pty) return false;
+    session.pty.write(data);
     return true;
   }
 
   resize(id: string, cols: number, rows: number): boolean {
     try {
-      this.sessions.get(id)?.pty.resize(cols, rows);
+      this.sessions.get(id)?.pty?.resize(cols, rows);
       return true;
     } catch {
       return false;
@@ -108,7 +125,14 @@ export class SessionManager {
   kill(id: string): boolean {
     const s = this.sessions.get(id);
     if (!s) return false;
-    s.pty.kill();
+    if (s.pty) {
+      try {
+        s.pty.kill();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.cleanup(id);
     return true;
   }
 
@@ -137,6 +161,10 @@ export class SessionManager {
   }
 
   private cleanup(id: string) {
+    const exitFns = this.exitListeners.get(id);
+    if (exitFns) {
+      for (const fn of exitFns) fn(0);
+    }
     this.sessions.delete(id);
     this.listeners.delete(id);
     this.exitListeners.delete(id);

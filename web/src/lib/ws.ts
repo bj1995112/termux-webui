@@ -16,6 +16,11 @@ export class DeckSocket {
   private pingTimer: number | null = null;
   private lastMessageTime = 0;
   private currentStatus: 'connecting' | 'online' | 'offline' = 'connecting';
+  private token: string | null = typeof localStorage !== 'undefined' ? localStorage.getItem('twui.token') : null;
+
+  setToken(token: string | null) {
+    this.token = token;
+  }
 
   onStatus(fn: StatusListener) {
     this.statusListeners.add(fn);
@@ -32,10 +37,20 @@ export class DeckSocket {
 
   connect() {
     this.closedByUser = false;
+    if (!this.token && typeof localStorage !== 'undefined') {
+      this.token = localStorage.getItem('twui.token');
+    }
+    // If no token, wait until user logs in
+    if (!this.token) {
+      this.setStatus('offline');
+      return;
+    }
+
     this.setStatus('connecting');
     this.stopHeartbeat();
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const tokenQuery = `?token=${encodeURIComponent(this.token)}`;
+    const ws = new WebSocket(`${proto}://${location.host}/ws${tokenQuery}`);
     this.ws = ws;
 
     ws.onopen = () => {
@@ -77,9 +92,7 @@ export class DeckSocket {
     this.stopHeartbeat();
     this.pingTimer = window.setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
-        // Send app-level ping to keep TCP connection & intermediate proxies alive
         this.send({ type: 'ping' });
-        // If we haven't heard anything from the server in 40 seconds, drop and reconnect
         if (Date.now() - this.lastMessageTime > 40000) {
           this.ws.close();
         }
@@ -94,9 +107,6 @@ export class DeckSocket {
     }
   }
 
-  /** Idempotent attach — repeated calls for the same session on the same
-   * connection are ignored, otherwise the server replays its buffer twice
-   * and the terminal shows duplicated content. */
   attach(sessionId: string) {
     if (this.attachedIds.has(sessionId)) return;
     this.attachedIds.add(sessionId);
@@ -123,4 +133,3 @@ export class DeckSocket {
 }
 
 export const deckSocket = new DeckSocket();
-

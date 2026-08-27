@@ -72,4 +72,24 @@ export interface AgentConversation {
   tokenUsage?: number;
 }
 
+export interface ConversationMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp?: number;
+}
 
+export interface ConversationDetail {
+  conversation: AgentConversation;
+  messages: ConversationMessage[];
+}
+
+export interface AuthStatus {
+  authRequired: boolean;
+  authenticated?: boolean;
+}
+
+export interface LoginResponse {
+  ok: boolean;
+  token?: string;
+  error?: string;
+}

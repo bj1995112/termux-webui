@@ -1,23 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
-
-const DARK = {
-  background: '#0b0d10',
-  foreground: '#e6e9ef',
-  cursor: '#4f8cff',
-  selectionBackground: '#2a3f6399',
-};
+import { THEMES } from '../theme.js';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
 
 interface Cell {
   col: number;
-  row: number; // absolute buffer row
+  row: number;
 }
 
 interface Props {
@@ -51,8 +47,29 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** One xterm per session, created once and kept alive; switching tabs only
- * toggles visibility so scrollback and running programs stay intact. */
+/** Extract URL at specific terminal buffer cell */
+function findUrlAtCell(term: Terminal, cell: Cell): string | null {
+  try {
+    const line = term.buffer.active.getLine(cell.row);
+    if (!line) return null;
+    const lineStr = line.translateToString(true);
+    if (!lineStr) return null;
+
+    const urlRegex = /https?:\/\/[^\s"'`<>，。！？（）()\[\]{}]+/gi;
+    let match: RegExpExecArray | null;
+    while ((match = urlRegex.exec(lineStr)) !== null) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (cell.col >= start && cell.col <= end) {
+        return match[0].replace(/[.,;:!?)]+$/, '');
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export default function TermView({ sessionId, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -60,18 +77,59 @@ export default function TermView({ sessionId, active }: Props) {
   const [showBar, setShowBar] = useState(false);
   const [copied, setCopied] = useState(false);
   const [, setScrollTick] = useState(0);
+  const [isExited, setIsExited] = useState(false);
+  const [exitCode, setExitCode] = useState<number | null>(null);
+  const [activeUrl, setActiveUrl] = useState<string | null>(null);
+  const [zoomIndicator, setZoomIndicator] = useState<number | null>(null);
+
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
-  const followRefs = new Map<string, { current: boolean }>();
+  const currentTheme = useDeck((s) => s.currentTheme);
+  const fontSize = useDeck((s) => s.fontSize);
+  const setFontSize = useDeck((s) => s.setFontSize);
+  const restartSession = useDeck((s) => s.restartSession);
+  const killSession = useDeck((s) => s.killSession);
+  const showToast = useDeck((s) => s.showToast);
+  const sessions = useDeck((s) => s.sessions);
 
-  // Create once per session.
+  const sessionObj = sessions.find((s) => s.id === sessionId);
+
+  // Sync initial exited state
+  useEffect(() => {
+    if (sessionObj?.status === 'exited') {
+      setIsExited(true);
+      setExitCode(sessionObj.exitCode ?? 0);
+    }
+  }, [sessionObj?.status, sessionObj?.exitCode]);
+
+  // Update theme dynamically
+  useEffect(() => {
+    if (termRef.current) {
+      const themeConfig = THEMES[currentTheme] || THEMES['tokyo-night'];
+      termRef.current.options.theme = themeConfig.terminal;
+    }
+  }, [currentTheme]);
+
+  // Update font size dynamically on pinch or preference change
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.fontSize = fontSize;
+      requestAnimationFrame(() => fitFns.get(sessionId)?.());
+    }
+  }, [fontSize, sessionId]);
+
+  // Create terminal instance once per session
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+
+    const themeConfig = THEMES[currentTheme] || THEMES['tokyo-night'];
+    const currentFontSize = useDeck.getState().fontSize || 13;
+
     const term = new Terminal({
-      theme: DARK,
+      theme: themeConfig.terminal,
       fontFamily: '"JetBrains Mono", "Roboto Mono", "Fira Code", ui-monospace, Menlo, Monaco, monospace',
-      fontSize: 13,
+      fontSize: currentFontSize,
       lineHeight: 1.25,
       cursorBlink: true,
       cursorStyle: 'block',
@@ -79,22 +137,42 @@ export default function TermView({ sessionId, active }: Props) {
       allowTransparency: true,
       macOptionIsMeta: true,
       rightClickSelectsWord: false,
+      allowProposedApi: true,
     });
     termRef.current = term;
 
     const fit = new FitAddon();
     term.loadAddon(fit);
+
+    // Safe load web links addon
+    try {
+      const webLinks = new WebLinksAddon((_event, uri) => {
+        setActiveUrl(uri);
+      });
+      term.loadAddon(webLinks);
+    } catch (e) {
+      console.warn('Failed to load WebLinksAddon', e);
+    }
+
+    // Safe load Unicode 11 for broad characters / emojis
+    try {
+      const unicode11 = new Unicode11Addon();
+      term.loadAddon(unicode11);
+      term.unicode.activeVersion = '11';
+    } catch (e) {
+      console.warn('Failed to load Unicode11Addon', e);
+    }
+
     term.open(host);
     term.onData((data) => deckSocket.send({ type: 'input', sessionId, data }));
 
     const fitNow = () => {
       if (host.clientWidth > 0 && host.clientHeight > 0) {
         fit.fit();
-        // High-precision physical grid auto-fit with hardware safe margin
         const core = (term as unknown as { _core?: { _renderService?: { dimensions?: { actualCellWidth: number } } } })._core;
         const cellWidth = core?._renderService?.dimensions?.actualCellWidth || 0;
         if (cellWidth > 0) {
-          const SAFE_PAD_X = 10; // 5px breathing room on each side
+          const SAFE_PAD_X = 10;
           const availWidth = Math.max(10, host.clientWidth - SAFE_PAD_X);
           const safeCols = Math.max(10, Math.floor(availWidth / cellWidth));
           if (safeCols < term.cols) {
@@ -114,8 +192,6 @@ export default function TermView({ sessionId, active }: Props) {
       fitNow();
     }
 
-
-    // ---- follow output -----------------------------------------------------
     const followRef = { current: followOutput };
     followRefs.set(sessionId, followRef);
     term.onScroll(() => {
@@ -132,6 +208,12 @@ export default function TermView({ sessionId, active }: Props) {
     let selectMoveOrigin: { x: number; y: number } | null = null;
     const SELECT_MOVE_THRESHOLD = 18;
 
+    // Pinch-to-zoom tracking variables
+    let pinchStartDist: number | null = null;
+    let pinchStartSize: number | null = null;
+    let lastPinchSize: number = currentFontSize;
+    let zoomHideTimer: number | null = null;
+
     const off = deckSocket.onMessage((msg) => {
       if (msg.type === 'output' && msg.sessionId === sessionId) {
         if (selecting) {
@@ -143,11 +225,13 @@ export default function TermView({ sessionId, active }: Props) {
         });
       }
       if (msg.type === 'exit' && msg.sessionId === sessionId) {
+        setIsExited(true);
+        setExitCode(msg.exitCode);
         term.write(`\r\n\x1b[33m[会话已退出 code=${msg.exitCode}]\x1b[0m\r\n`);
       }
     });
 
-    // ---- long-press selection ---------------------------------------------
+    // Long-press selection & touch interaction
     const LONG_PRESS_MS = 400;
     const SCROLL_CANCEL_PX = 15;
     let pressTimer: number | null = null;
@@ -241,7 +325,27 @@ export default function TermView({ sessionId, active }: Props) {
 
     const onHostTouchStart = (event: TouchEvent) => {
       const target = event.target;
-      if (target instanceof HTMLElement && target.closest('.sel-bar')) return;
+      if (target instanceof HTMLElement && (target.closest('.sel-bar') || target.closest('.link-bar') || target.closest('.exit-banner'))) return;
+
+      // 1. Two-finger pinch to zoom font size (Termux standard: 6px ~ 36px)
+      if (event.touches.length === 2) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+        gesture = 'idle';
+        if (zoomHideTimer) clearTimeout(zoomHideTimer);
+
+        const t1 = event.touches[0];
+        const t2 = event.touches[1];
+        pinchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        pinchStartSize = useDeck.getState().fontSize;
+        lastPinchSize = pinchStartSize;
+        setZoomIndicator(pinchStartSize);
+        return;
+      }
 
       const which = handleAtPoint(target);
       if (which && handlesRef.current) {
@@ -289,6 +393,24 @@ export default function TermView({ sessionId, active }: Props) {
     };
 
     const onHostTouchMove = (event: TouchEvent) => {
+      // 1. Two-finger pinch zoom
+      if (event.touches.length === 2 && pinchStartDist && pinchStartSize) {
+        event.preventDefault();
+        event.stopPropagation();
+        const t1 = event.touches[0];
+        const t2 = event.touches[1];
+        const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const scale = curDist / Math.max(1, pinchStartDist);
+        const target = Math.min(36, Math.max(6, Math.round(pinchStartSize * scale)));
+        if (target !== lastPinchSize) {
+          lastPinchSize = target;
+          navigator.vibrate?.(8);
+          setFontSize(target);
+          setZoomIndicator(target);
+        }
+        return;
+      }
+
       if (dragWhich) {
         event.preventDefault();
         event.stopPropagation();
@@ -339,6 +461,15 @@ export default function TermView({ sessionId, active }: Props) {
     };
 
     const onHostTouchEnd = (event: TouchEvent) => {
+      // 1. Pinch zoom finished
+      if (pinchStartDist !== null && event.touches.length < 2) {
+        pinchStartDist = null;
+        pinchStartSize = null;
+        if (zoomHideTimer) clearTimeout(zoomHideTimer);
+        zoomHideTimer = window.setTimeout(() => setZoomIndicator(null), 1000);
+        return;
+      }
+
       if (dragWhich) {
         const t = [...event.changedTouches].find((x) => x.identifier === primaryId);
         if (primaryId === null || t) {
@@ -368,6 +499,18 @@ export default function TermView({ sessionId, active }: Props) {
         }
         parked = [];
         if (term.hasSelection()) setShowBar(true);
+      } else if (gesture === 'pressed' && pressPoint) {
+        // Tap detected -> check if a link is tapped
+        const hit = cellAt(pressPoint.x, pressPoint.y);
+        if (hit) {
+          const url = findUrlAtCell(term, hit);
+          if (url) {
+            navigator.vibrate?.(20);
+            setActiveUrl(url);
+          }
+        }
+        gesture = 'idle';
+        primaryId = null;
       } else {
         gesture = 'idle';
         primaryId = null;
@@ -375,10 +518,23 @@ export default function TermView({ sessionId, active }: Props) {
       }
     };
 
+    const onHostClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.closest('.sel-bar') || target.closest('.link-bar') || target.closest('.exit-banner'))) return;
+      const hit = cellAt(event.clientX, event.clientY);
+      if (hit) {
+        const url = findUrlAtCell(term, hit);
+        if (url) {
+          setActiveUrl(url);
+        }
+      }
+    };
+
     host.addEventListener('touchstart', onHostTouchStart, { passive: false, capture: true });
     host.addEventListener('touchmove', onHostTouchMove, { passive: false, capture: true });
     host.addEventListener('touchend', onHostTouchEnd, { passive: true, capture: true });
     host.addEventListener('touchcancel', onHostTouchEnd, { passive: true, capture: true });
+    host.addEventListener('click', onHostClick);
 
     const ro = new ResizeObserver(() => requestAnimationFrame(fitNow));
     ro.observe(host);
@@ -388,11 +544,13 @@ export default function TermView({ sessionId, active }: Props) {
       off();
       ro.disconnect();
       if (pressTimer) clearTimeout(pressTimer);
+      if (zoomHideTimer) clearTimeout(zoomHideTimer);
       stopDragScroll();
       host.removeEventListener('touchstart', onHostTouchStart, true);
       host.removeEventListener('touchmove', onHostTouchMove, true);
       host.removeEventListener('touchend', onHostTouchEnd, true);
       host.removeEventListener('touchcancel', onHostTouchEnd, true);
+      host.removeEventListener('click', onHostClick);
       fitFns.delete(sessionId);
       followRefs.delete(sessionId);
       term.dispose();
@@ -456,7 +614,6 @@ export default function TermView({ sessionId, active }: Props) {
     if (active) requestAnimationFrame(() => fitFns.get(sessionId)?.());
   }, [active, sessionId]);
 
-
   const handleCoords = (which: 'a' | 'b') => {
     if (!handles) return null;
     const term = termRef.current;
@@ -498,8 +655,84 @@ export default function TermView({ sessionId, active }: Props) {
     setShowBar(false);
   };
 
+  const handleRestart = async () => {
+    setIsExited(false);
+    await restartSession(sessionId);
+  };
+
   return (
     <div className="term-host absolute inset-0 h-full w-full" ref={hostRef}>
+      {/* Exited Notification Banner */}
+      {isExited && (
+        <div className="exit-banner absolute top-2 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-panel/90 px-3.5 py-1.5 text-xs shadow-xl backdrop-blur-md">
+          <span className="text-amber-400 font-bold">⚠️ 会话已退出 (code={exitCode ?? 0})</span>
+          <button
+            onClick={() => void handleRestart()}
+            className="flex items-center gap-1 rounded bg-accent px-2 py-0.5 text-xs font-semibold text-white active:bg-accent-hover shadow"
+          >
+            <span>🔄</span>
+            <span>重新启动</span>
+          </button>
+          <button
+            onClick={() => void killSession(sessionId)}
+            className="rounded p-0.5 text-muted hover:text-red-400"
+            title="关闭该会话"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Pinch Zoom Floating Indicator */}
+      {zoomIndicator !== null && (
+        <div className="zoom-indicator pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 flex items-center gap-2 rounded-2xl border border-accent/40 bg-panel/95 px-4 py-2.5 text-sm font-bold text-accent shadow-2xl backdrop-blur-md animate-in zoom-in-90 duration-150">
+          <span className="text-lg">🔍</span>
+          <span>字体大小: {zoomIndicator}px</span>
+          {zoomIndicator === 13 && <span className="text-[10px] text-muted font-normal">(默认)</span>}
+        </div>
+      )}
+
+      {/* Detected URL Floating Action Bar */}
+      {activeUrl && (
+        <div className="link-bar absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex max-w-[92%] items-center gap-2 rounded-2xl border border-accent/40 bg-panel/95 px-3.5 py-2.5 text-xs shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
+          <span className="text-base">🔗</span>
+          <div className="overflow-hidden">
+            <span className="block truncate max-w-[170px] text-text font-mono select-all text-[11px]">
+              {activeUrl}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+            <a
+              href={activeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setActiveUrl(null)}
+              className="flex items-center gap-1 rounded-lg bg-accent px-2.5 py-1 text-xs font-semibold text-white shadow active:scale-95 transition-all"
+            >
+              <span>🌐</span>
+              <span>打开</span>
+            </a>
+            <button
+              onClick={() => {
+                void copyText(activeUrl);
+                showToast('链接已复制', 'success');
+                setActiveUrl(null);
+              }}
+              className="flex items-center gap-1 rounded-lg border border-border bg-panel2 px-2 py-1 text-xs text-muted hover:text-text active:scale-95 transition-all"
+            >
+              <span>📋</span>
+              <span>复制</span>
+            </button>
+            <button
+              onClick={() => setActiveUrl(null)}
+              className="flex h-6 w-6 items-center justify-center rounded-lg text-muted hover:text-text active:text-accent"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {handles && posA && (
         <div className="sel-handle start" style={{ left: posA.left, top: posA.top }} data-which="a" />
       )}

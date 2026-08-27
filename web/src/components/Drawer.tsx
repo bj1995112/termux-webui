@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDeck } from '../store.js';
 import type { AgentConversation, CliId } from '@termux-webui/shared';
+import { THEMES, type ThemeId } from '../theme.js';
 
 interface Props {
   open: boolean;
@@ -55,16 +56,37 @@ function formatExactDate(ts?: number): string {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-const CLI_CONFIG: Record<string, { icon: string; name: string; color: string }> = {
-  codex: { icon: '⚡', name: 'Codex', color: 'text-amber-400 bg-amber-400/15 border-amber-400/30' },
-  pi: { icon: '🥧', name: 'Pi Agent', color: 'text-rose-400 bg-rose-400/15 border-rose-400/30' },
-  agy: { icon: '🔮', name: 'Antigravity', color: 'text-cyan-400 bg-cyan-400/15 border-cyan-400/30' },
-  claude: { icon: '🤖', name: 'Claude', color: 'text-purple-400 bg-purple-400/15 border-purple-400/30' },
-  opencode: { icon: '💻', name: 'OpenCode', color: 'text-blue-400 bg-blue-400/15 border-blue-400/30' },
-  shell: { icon: '🐚', name: 'Shell', color: 'text-emerald-400 bg-emerald-400/15 border-emerald-400/30' },
-  aider: { icon: '🛠️', name: 'Aider', color: 'text-yellow-400 bg-yellow-400/15 border-yellow-400/30' },
-  openclaw: { icon: '🦞', name: 'OpenClaw', color: 'text-red-400 bg-red-400/15 border-red-400/30' },
-  hermes: { icon: '🕊️', name: 'Hermes', color: 'text-indigo-400 bg-indigo-400/15 border-indigo-400/30' },
+const CLI_CONFIG: Record<string, { icon: string; name: string; gradient: string }> = {
+  codex: {
+    icon: '⚡',
+    name: 'Codex',
+    gradient: 'from-amber-500/20 to-orange-500/10 text-amber-300 border-amber-500/40',
+  },
+  pi: {
+    icon: '🥧',
+    name: 'Pi Agent',
+    gradient: 'from-rose-500/20 to-pink-500/10 text-rose-300 border-rose-500/40',
+  },
+  agy: {
+    icon: '🔮',
+    name: 'Antigravity',
+    gradient: 'from-cyan-500/20 to-blue-500/10 text-cyan-300 border-cyan-500/40',
+  },
+  claude: {
+    icon: '🤖',
+    name: 'Claude Code',
+    gradient: 'from-purple-500/20 to-indigo-500/10 text-purple-300 border-purple-500/40',
+  },
+  opencode: {
+    icon: '💻',
+    name: 'OpenCode',
+    gradient: 'from-blue-500/20 to-sky-500/10 text-blue-300 border-blue-500/40',
+  },
+  shell: {
+    icon: '🐚',
+    name: 'Shell',
+    gradient: 'from-emerald-500/20 to-teal-500/10 text-emerald-300 border-emerald-500/40',
+  },
 };
 
 export default function Drawer({ open, onClose, onNewSession }: Props) {
@@ -72,10 +94,20 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   const activeId = useDeck((s) => s.activeId);
   const setActive = useDeck((s) => s.setActive);
   const killSession = useDeck((s) => s.killSession);
+  const restartSession = useDeck((s) => s.restartSession);
   const conversations = useDeck((s) => s.conversations);
   const loadHistory = useDeck((s) => s.loadHistory);
   const resumeConversation = useDeck((s) => s.resumeConversation);
   const deleteHistory = useDeck((s) => s.deleteHistory);
+  const loadConversationDetail = useDeck((s) => s.loadConversationDetail);
+  const showToast = useDeck((s) => s.showToast);
+
+  // Auth & Theme & Appearance
+  const currentTheme = useDeck((s) => s.currentTheme);
+  const setTheme = useDeck((s) => s.setTheme);
+  const fontSize = useDeck((s) => s.fontSize);
+  const resetFontSize = useDeck((s) => s.resetFontSize);
+  const logout = useDeck((s) => s.logout);
 
   // Terminal preferences
   const followOutput = useDeck((s) => s.followOutput);
@@ -86,6 +118,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   // Accordion state
   const [openActive, setOpenActive] = useState(true);
   const [openHistory, setOpenHistory] = useState(false);
+  const [openTheme, setOpenTheme] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
 
   // History filtering & search
@@ -118,9 +151,13 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
     try {
       await resumeConversation(conv);
       close();
-    } catch (err) {
-      alert(`恢复会话失败: ${err instanceof Error ? err.message : String(err)}`);
+    } catch {
+      /* handled in store */
     }
+  };
+
+  const handleViewDetail = async (conv: AgentConversation) => {
+    await loadConversationDetail(conv.cli, conv.id);
   };
 
   const handleDeleteHistory = async (conv: AgentConversation) => {
@@ -165,7 +202,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
       {/* Scrim */}
       <div
         onClick={close}
-        className={`absolute inset-0 bg-black/60 transition-opacity duration-200 ${
+        className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${
           open ? 'opacity-100' : 'opacity-0'
         }`}
       />
@@ -177,14 +214,14 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
         }`}
       >
         {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3.5 bg-panel2/50">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3.5 bg-panel2/50 backdrop-blur-md">
           <div>
             <p className="text-base font-bold text-accent">▚ Termux WebUI</p>
-            <p className="text-xs text-muted">全能 Agent 调度控制台</p>
+            <p className="text-[11px] text-muted">移动端 AI Agent 统一调度中枢</p>
           </div>
           <button
             onClick={handleNewSession}
-            className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white shadow active:bg-accent/80"
+            className="flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white shadow-md active:bg-accent-hover transition-all"
           >
             <span>⊕</span>
             <span>新建会话</span>
@@ -203,7 +240,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm">⚡</span>
-                <span>当前活跃终端</span>
+                <span>当前运行终端</span>
                 <span className="rounded-full bg-accent/20 px-1.5 py-0.2 text-[10px] font-bold text-accent">
                   {sessions.length}
                 </span>
@@ -220,12 +257,13 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                 ) : (
                   sessions.map((s, idx) => {
                     const isCur = s.id === activeId;
-                    const conf = CLI_CONFIG[s.kind] || { icon: '🐚', name: s.kind, color: '' };
+                    const isExited = s.status === 'exited';
+                    const conf = CLI_CONFIG[s.kind] || { icon: '🐚', name: s.kind, gradient: '' };
                     return (
                       <div
                         key={s.id}
                         onClick={() => selectSession(s.id)}
-                        className={`group flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 transition-colors cursor-pointer ${
+                        className={`group flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 transition-all cursor-pointer ${
                           isCur
                             ? 'border-accent bg-accent/15 shadow-sm'
                             : 'border-border bg-panel hover:bg-panel2 active:bg-panel2'
@@ -234,7 +272,11 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                         <div className="flex items-center gap-2 overflow-hidden">
                           <span
                             className={`h-2 w-2 flex-shrink-0 rounded-full ${
-                              isCur ? 'bg-accent animate-pulse' : 'bg-emerald-400'
+                              isExited
+                                ? 'bg-amber-400'
+                                : isCur
+                                ? 'bg-accent animate-pulse'
+                                : 'bg-emerald-400'
                             }`}
                           />
                           <div className="overflow-hidden">
@@ -247,6 +289,11 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                                   当前
                                 </span>
                               )}
+                              {isExited && (
+                                <span className="rounded bg-amber-400/20 px-1 text-[9px] font-semibold text-amber-400">
+                                  已退出
+                                </span>
+                              )}
                             </div>
                             <p className="truncate text-[10px] text-muted font-mono">
                               {s.cwd || '~'}
@@ -254,16 +301,30 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                           </div>
                         </div>
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void killSession(s.id);
-                          }}
-                          className="flex-shrink-0 rounded p-1 text-muted hover:text-red-400 hover:bg-red-500/10 active:text-red-400"
-                          title="关闭会话"
-                        >
-                          ✕
-                        </button>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {isExited && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void restartSession(s.id);
+                              }}
+                              className="rounded p-1 text-accent hover:bg-accent/15 active:scale-95"
+                              title="重启终端"
+                            >
+                              🔄
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void killSession(s.id);
+                            }}
+                            className="rounded p-1 text-muted hover:text-red-400 hover:bg-red-500/10 active:text-red-400"
+                            title="关闭会话"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                     );
                   })
@@ -359,7 +420,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                 )}
 
                 {/* 3. Unified Continuous Scrollable Conversation List */}
-                <div className="max-h-[340px] overflow-y-auto space-y-1.5 overscroll-contain pr-0.5">
+                <div className="max-h-[340px] overflow-y-auto space-y-2 overscroll-contain pr-0.5">
                   {filteredConversations.length === 0 ? (
                     <div className="py-6 text-center text-xs text-muted">
                       <p>未找到匹配的历史对话</p>
@@ -370,18 +431,18 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                       const conf = CLI_CONFIG[conv.cli] || {
                         icon: '🤖',
                         name: conv.cli,
-                        color: 'text-text bg-panel2 border-border',
+                        gradient: 'from-blue-500/20 to-sky-500/10 text-blue-300 border-blue-500/40',
                       };
 
                       return (
                         <div
                           key={`${conv.cli}-${conv.id}`}
-                          className="rounded-lg border border-border bg-panel p-2.5 transition-all text-xs hover:border-accent/40"
+                          className="rounded-xl border border-border bg-panel p-3 transition-all text-xs hover:border-accent/40 shadow-sm"
                         >
-                          {/* Top Row: Software Badge + Relative Friendly Time */}
+                          {/* Top Row: Software Gradient Badge + Relative Friendly Time */}
                           <div className="flex items-center justify-between gap-1.5 mb-1.5">
                             <span
-                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold border ${conf.color}`}
+                              className={`rounded-lg px-2 py-0.5 text-[10px] font-bold border bg-gradient-to-r ${conf.gradient}`}
                             >
                               {conf.icon} {conf.name}
                             </span>
@@ -393,7 +454,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                             </span>
                           </div>
 
-                          {/* Card Content (Click to expand details) */}
+                          {/* Card Content (Click to toggle expanded metadata) */}
                           <div
                             onClick={() =>
                               setExpandedCardId(isExpanded ? null : `${conv.cli}-${conv.id}`)
@@ -412,7 +473,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                           {isExpanded && (
                             <div className="mt-2 pt-2 border-t border-border/60 text-[11px] text-muted space-y-1.5">
                               {conv.firstPrompt && (
-                                <div className="text-text/90 bg-panel2 p-2 rounded select-text break-words leading-relaxed">
+                                <div className="text-text/90 bg-panel2 p-2.5 rounded-lg select-text break-words leading-relaxed border border-border/40">
                                   <span className="font-semibold text-accent block text-[10px] mb-0.5">
                                     💬 首次提问内容：
                                   </span>
@@ -421,7 +482,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                               )}
 
                               {/* Exact Dates */}
-                              <div className="rounded bg-panel2/60 p-2 space-y-1 text-[10px] font-mono text-muted">
+                              <div className="rounded-lg bg-panel2/60 p-2 space-y-1 text-[10px] font-mono text-muted border border-border/30">
                                 <div className="flex items-center justify-between">
                                   <span>📅 发起时间:</span>
                                   <span className="text-text">{formatExactDate(conv.createdAt)}</span>
@@ -431,7 +492,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                                   <span className="text-text">{formatExactDate(conv.updatedAt)}</span>
                                 </div>
                                 <div className="flex items-center justify-between pt-0.5 border-t border-border/40">
-                                  <span>📊 对话轮次: {conv.messageCount ?? 1} 轮</span>
+                                  <span>📊 轮次: {conv.messageCount ?? 1} 轮</span>
                                   <span>ID: {conv.id.slice(0, 10)}...</span>
                                 </div>
                               </div>
@@ -439,18 +500,29 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                           )}
 
                           {/* Bottom Action Buttons */}
-                          <div className="mt-2 flex items-center justify-between gap-2 pt-1.5 border-t border-border/40">
-                            <button
-                              onClick={() => void handleResume(conv)}
-                              className="flex items-center gap-1 rounded bg-accent/15 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent/25 active:bg-accent active:text-white transition-colors"
-                            >
-                              <span>🚀</span>
-                              <span>恢复继续聊</span>
-                            </button>
+                          <div className="mt-2.5 flex items-center justify-between gap-1.5 pt-2 border-t border-border/40">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => void handleResume(conv)}
+                                className="flex items-center gap-1 rounded-lg bg-accent/20 border border-accent/40 px-2.5 py-1 text-[11px] font-semibold text-accent hover:bg-accent hover:text-white active:scale-95 transition-all"
+                              >
+                                <span>🚀</span>
+                                <span>恢复继续聊</span>
+                              </button>
+
+                              <button
+                                onClick={() => void handleViewDetail(conv)}
+                                className="flex items-center gap-1 rounded-lg border border-border bg-panel2 px-2 py-1 text-[11px] text-muted hover:text-text active:scale-95 transition-all"
+                                title="查看对话只读记录"
+                              >
+                                <span>📖</span>
+                                <span>看记录</span>
+                              </button>
+                            </div>
 
                             <button
                               onClick={() => void handleDeleteHistory(conv)}
-                              className="flex items-center gap-1 rounded p-1 text-[11px] text-muted hover:text-red-400 hover:bg-red-500/10 active:text-red-400 transition-colors"
+                              className="flex items-center gap-1 rounded-lg p-1 text-[11px] text-muted hover:text-red-400 hover:bg-red-500/10 active:text-red-400 transition-colors"
                               title="删除此存档"
                             >
                               <span>🗑️</span>
@@ -466,7 +538,63 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
           </div>
 
           {/* =================================================================== */}
-          {/* 3. 系统与偏好设置 (Settings Accordion) */}
+          {/* 3. 5 大精选大师级主题选择 (Theme Switcher) */}
+          {/* =================================================================== */}
+          <div className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
+            <button
+              onClick={() => setOpenTheme(!openTheme)}
+              className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-bold text-text hover:bg-panel2/80 active:bg-panel2"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🎨</span>
+                <span>精选大师级主题</span>
+                <span className="rounded-full bg-accent/20 px-1.5 py-0.2 text-[10px] font-semibold text-accent">
+                  {THEMES[currentTheme]?.name.split(' ')[0]}
+                </span>
+              </div>
+              <span className="text-xs text-muted">{openTheme ? '▾' : '▸'}</span>
+            </button>
+
+            {openTheme && (
+              <div className="border-t border-border/60 p-2.5 space-y-2">
+                {(Object.keys(THEMES) as ThemeId[]).map((tid) => {
+                  const t = THEMES[tid];
+                  const isCurrent = tid === currentTheme;
+                  return (
+                    <div
+                      key={tid}
+                      onClick={() => setTheme(tid)}
+                      className={`flex items-center justify-between rounded-xl border p-2.5 cursor-pointer transition-all ${
+                        isCurrent
+                          ? 'border-accent bg-accent/15 shadow-sm glow-accent'
+                          : 'border-border bg-panel hover:bg-panel2'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className="flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold border border-border/60"
+                          style={{ background: t.vars['--bg-panel'], color: t.vars['--accent'] }}
+                        >
+                          {t.badge}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-text">{t.name}</p>
+                          <p className="text-[10px] text-muted">{t.description}</p>
+                        </div>
+                      </div>
+
+                      {isCurrent && (
+                        <span className="text-xs text-accent font-bold">✓ 当前</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* =================================================================== */}
+          {/* 4. 系统与偏好设置 (Settings Accordion) */}
           {/* =================================================================== */}
           <div className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
             <button
@@ -475,7 +603,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm">⚙️</span>
-                <span>系统与偏好设置</span>
+                <span>系统偏好与安全</span>
               </div>
               <span className="text-xs text-muted">{openSettings ? '▾' : '▸'}</span>
             </button>
@@ -510,11 +638,37 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                   />
                 </label>
 
-                {/* 状态与字体说明 */}
-                <div className="pt-2 border-t border-border/40 text-[10px] text-muted space-y-1 font-mono">
-                  <p>• 字体栈：JetBrains Mono / Roboto Mono</p>
-                  <p>• 物理安全边距：10px（自动防切）</p>
-                  <p>• 模式：局域网开放 (0.0.0.0)</p>
+                {/* 终端字体大小与重置 */}
+                <div className="flex items-center justify-between py-0.5">
+                  <div>
+                    <span className="text-text font-medium block">终端字体大小</span>
+                    <span className="text-[10px] text-muted block">当前: {fontSize}px (双指捏合可缩放 6~36px)</span>
+                  </div>
+                  {fontSize !== 13 && (
+                    <button
+                      onClick={() => resetFontSize()}
+                      className="rounded-lg border border-accent/40 bg-accent/15 px-2.5 py-1 text-[11px] font-semibold text-accent active:scale-95 transition-all"
+                    >
+                      重置 13px
+                    </button>
+                  )}
+                </div>
+
+                {/* 登出 / 锁定 */}
+                <div className="pt-2 border-t border-border/40 flex items-center justify-between">
+                  <div>
+                    <span className="text-text font-medium block">会话安全锁</span>
+                    <span className="text-[10px] text-muted block">退出当前登录认证 (密码: 000000)</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      close();
+                      void logout();
+                    }}
+                    className="rounded-lg border border-red-500/40 bg-red-500/15 px-3 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/25 active:scale-95"
+                  >
+                    🔒 锁定 / 登出
+                  </button>
                 </div>
               </div>
             )}
