@@ -7,8 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
 import { THEMES } from '../theme.js';
-import { TerminalStreamPipeline, type TranslationAnchor } from '../lib/streamPipeline.js';
-import { AnchorOverlay } from '../components/AnchorOverlay.js';
+import { TerminalTranslator } from '../lib/terminalTranslator.js';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
@@ -122,9 +121,11 @@ export default function TermView({ sessionId, active }: Props) {
 
   const translateText = useDeck((s) => s.translateText);
   const showTranslation = useDeck((s) => s.showTranslation);
-  const [anchors, setAnchors] = useState<TranslationAnchor[]>([]);
-  const [renderTick, setRenderTick] = useState(0);
-  const pipelineRef = useRef<TerminalStreamPipeline | null>(null);
+  const translatorRef = useRef<TerminalTranslator | null>(null);
+
+  useEffect(() => {
+    translatorRef.current?.setEnabled(showTranslation);
+  }, [showTranslation]);
 
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
@@ -208,25 +209,13 @@ export default function TermView({ sessionId, active }: Props) {
     }
 
     term.open(host);
-    const pipeline = new TerminalStreamPipeline(term, translateText, setAnchors);
-    pipelineRef.current = pipeline;
-    requestAnimationFrame(() => pipeline.refresh());
-
-    const notifyRender = () => {
-      setRenderTick((t) => (t + 1) % 1000000);
-    };
+    const translator = new TerminalTranslator(term, translateText);
+    translator.setEnabled(useDeck.getState().showTranslation);
+    translatorRef.current = translator;
 
     term.onData((data) => {
       deckSocket.send({ type: 'input', sessionId, data });
-      pipeline.onUserInput();
-      notifyRender();
     });
-    term.onCursorMove(() => {
-      pipeline.onUserInput();
-      notifyRender();
-    });
-    term.onRender(() => notifyRender());
-    term.onLineFeed(() => notifyRender());
 
     const fitNow = () => {
       if (host.clientWidth > 0 && host.clientHeight > 0) {
@@ -242,7 +231,6 @@ export default function TermView({ sessionId, active }: Props) {
           }
         }
         deckSocket.send({ type: 'resize', sessionId, cols: term.cols, rows: term.rows });
-        pipeline.refresh();
       }
     };
     fitFns.set(sessionId, fitNow);
@@ -264,7 +252,6 @@ export default function TermView({ sessionId, active }: Props) {
         const buf = term.buffer.active;
         followRef.current = buf.baseY - buf.viewportY <= 1;
       }
-      pipeline.feed();
     });
 
     let selecting = false;
@@ -284,10 +271,8 @@ export default function TermView({ sessionId, active }: Props) {
           parked.push(msg.data);
           return;
         }
-        term.write(msg.data, () => {
-          if (followRefs.get(sessionId)?.current) term.scrollToBottom();
-          pipeline.feed();
-        });
+        translator.ingest(msg.data);
+        if (followRefs.get(sessionId)?.current) term.scrollToBottom();
       }
       if (msg.type === 'exit' && msg.sessionId === sessionId) {
         setIsExited(true);
@@ -604,8 +589,8 @@ export default function TermView({ sessionId, active }: Props) {
 
     return () => {
       off();
-      pipeline.clear();
-      pipelineRef.current = null;
+      translator.clear();
+      translatorRef.current = null;
       ro.disconnect();
       if (pressTimer) clearTimeout(pressTimer);
       if (zoomHideTimer) clearTimeout(zoomHideTimer);
@@ -754,8 +739,6 @@ export default function TermView({ sessionId, active }: Props) {
 
   return (
     <div className="term-host absolute inset-0 h-full w-full" ref={hostRef}>
-      {/* Real-time Dual Pipeline Translation Anchor Overlay */}
-      <AnchorOverlay term={termRef.current} anchors={anchors} visible={showTranslation} renderTick={renderTick} />
 
       {/* Exited Notification Banner */}
       {isExited && (
