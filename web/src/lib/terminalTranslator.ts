@@ -4,11 +4,11 @@ import { DEV_TOOL_EXACT_DICT, DEV_TOOL_TEMPLATES } from '@termux-webui/shared';
 export type TranslateFunction = (text: string) => Promise<string>;
 
 /**
- * Ultra-Responsive Zero-Latency Stream Terminal Translator
- * 1. 0 Overlays, 100% Native Single-Layer Rendering
- * 2. Instant In-Stream ANSI-Safe Longest-Phrase Replacement
- * 3. Slash-Command & Option Menu Friendly
- * 4. 0-Latency Local Dictionary & Persistent Learned Cache
+ * Industrial-Grade Terminal Stream Translator with Token Shielding
+ * 1. URL & File Path Shielding (100% Immunity to mistranslation)
+ * 2. Case-Insensitive Greedy Longest-Phrase Matcher
+ * 3. Dynamic Template Interpolation (Numbers, durations, counts)
+ * 4. 0 Overlay / 0 Shadow / 100% Native xterm Stream Ingestion
  */
 export class TerminalTranslator {
   private term: Terminal;
@@ -57,6 +57,7 @@ export class TerminalTranslator {
     this.sortedPhrases = list.map((item) => {
       const escaped = item.raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       return {
+        // Case-insensitive global matching
         pattern: new RegExp(escaped, 'gi'),
         rawLen: item.rawLen,
         target: item.target,
@@ -84,7 +85,6 @@ export class TerminalTranslator {
 
   /**
    * Ingests raw PTY chunk before xterm Buffer.
-   * Performs instant 0ms transformation and writes directly to terminal.write().
    */
   public ingest(rawChunk: string): void {
     if (!this.isEnabled) {
@@ -96,13 +96,12 @@ export class TerminalTranslator {
       const transformed = this.transformStream(rawChunk);
       this.term.write(transformed);
     } catch {
-      // Graceful fallback: never crash terminal
       this.term.write(rawChunk);
     }
   }
 
   /**
-   * Transforms stream chunks while strictly preserving ANSI sequences.
+   * Transforms stream chunks while strictly preserving ANSI sequences and shielding URLs.
    */
   private transformStream(chunk: string): string {
     if (!/[A-Za-z]{2,}/.test(chunk)) {
@@ -120,18 +119,34 @@ export class TerminalTranslator {
         continue;
       }
 
-      // Check if token contains English letters
       if (!/[A-Za-z]{2,}/.test(token)) {
         continue;
       }
 
-      // Skip lines that are already Chinese
+      // Skip lines that already contain substantive Chinese
       const chineseCount = (token.match(/[\u4e00-\u9fa5]/g) || []).length;
       if (chineseCount >= 4) {
         continue;
       }
 
-      // 1. Dynamic template replacers (Numbers, elapsed times, vulnerabilities)
+      // === SHIELDING STEP 1: Shield URLs and File Paths with Safe Placeholders ===
+      const shields: string[] = [];
+      // Shield HTTP/HTTPS/WS URLs (e.g. http://localhost:3000, https://github.com/...)
+      token = token.replace(/(https?:\/\/[^\s\x1b\x07)\]'"]+)/gi, (match) => {
+        const id = `__URL_SHIELD_${shields.length}__`;
+        shields.push(match);
+        return id;
+      });
+
+      // Shield explicit file paths (e.g. /var/log/syslog, /usr/bin/node, ./src/main.ts)
+      token = token.replace(/((?:\/|[a-zA-Z]:\\|\.\/|\.\.\/)[\w.-]+(?:\/[\w.-]+)+)/g, (match) => {
+        const id = `__PATH_SHIELD_${shields.length}__`;
+        shields.push(match);
+        return id;
+      });
+
+      // === TRANSLATION STEP 2: Template & Dictionary Greedy Matching ===
+      // 2.1 Dynamic template replacers
       let templateMatched = false;
       for (const tpl of DEV_TOOL_TEMPLATES) {
         if (tpl.pattern.test(token)) {
@@ -142,39 +157,46 @@ export class TerminalTranslator {
           templateMatched = true;
         }
       }
-      if (templateMatched) {
-        tokens[i] = token;
-        continue;
-      }
 
-      // 2. Exact match check
-      const trimmed = token.trim();
-      const exact = this.exactDictMap.get(trimmed.toLowerCase());
-      if (exact) {
-        tokens[i] = token.replace(trimmed, exact);
-        continue;
-      }
-
-      // 3. Greedy Longest-Phrase Substring Replacement
-      let modified = token;
-      for (const phrase of this.sortedPhrases) {
-        if (phrase.pattern.test(modified)) {
-          modified = modified.replace(phrase.pattern, phrase.target);
-          phrase.pattern.lastIndex = 0;
+      if (!templateMatched) {
+        // 2.2 Exact match check
+        const trimmed = token.trim();
+        const exact = this.exactDictMap.get(trimmed.toLowerCase());
+        if (exact) {
+          token = token.replace(trimmed, exact);
+        } else {
+          // 2.3 Greedy Longest-Phrase Substring Replacement
+          let modified = token;
+          for (const phrase of this.sortedPhrases) {
+            if (phrase.pattern.test(modified)) {
+              modified = modified.replace(phrase.pattern, phrase.target);
+              phrase.pattern.lastIndex = 0;
+            }
+          }
+          token = modified;
         }
       }
-      tokens[i] = modified;
 
-      // 4. Trigger async background machine translation for unknown standalone sentences
+      // === UNSHIELDING STEP 3: Restore Protected URLs & Paths 100% Untouched ===
+      for (let sIdx = 0; sIdx < shields.length; sIdx += 1) {
+        const urlId = `__URL_SHIELD_${sIdx}__`;
+        const pathId = `__PATH_SHIELD_${sIdx}__`;
+        token = token.split(urlId).join(shields[sIdx]);
+        token = token.split(pathId).join(shields[sIdx]);
+      }
+
+      tokens[i] = token;
+
+      // 4. Background learn for unmatched standalone text
+      const finalTrimmed = token.trim();
       if (
-        modified === token &&
-        trimmed.length >= 4 &&
-        trimmed.length <= 120 &&
-        !trimmed.startsWith('http') &&
-        !trimmed.startsWith('--') &&
-        !/^[0-9a-f]{7,40}$/i.test(trimmed)
+        shields.length === 0 &&
+        finalTrimmed.length >= 4 &&
+        finalTrimmed.length <= 100 &&
+        !finalTrimmed.startsWith('--') &&
+        !/^[0-9a-f]{7,40}$/i.test(finalTrimmed)
       ) {
-        void this.asyncTranslateAndLearn(trimmed);
+        void this.asyncTranslateAndLearn(finalTrimmed);
       }
     }
 
