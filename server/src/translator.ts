@@ -14,6 +14,7 @@ const LOCAL_TERMS: Record<string, string> = {
   'permission denied': '权限被拒绝',
   'command not found': '未找到命令',
   'syntaxerror: unexpected token': '语法错误：意外的标记',
+  'syntax error': '语法错误',
   'connection refused': '连接被拒绝',
   'timed out': '连接超时',
   'address already in use': '端口地址已被占用',
@@ -24,11 +25,14 @@ const LOCAL_TERMS: Record<string, string> = {
   'compilation failed': '编译失败',
   'disk quota exceeded': '磁盘配额已超出',
   'authentication failed': '身份验证失败',
+  'not found': '未找到',
+  'unhandled error': '未处理的错误',
+  'cannot find module': '找不到指定的模块',
 };
 
 /** In-memory cache for fast repeated query responses */
 const translationCache = new Map<string, { translated: string; fromLang: string; source: string; time: number }>();
-const MAX_CACHE_ENTRIES = 500;
+const MAX_CACHE_ENTRIES = 1000;
 
 function getCacheKey(text: string, toLang: string, config?: TranslationConfig): string {
   const provider = config?.provider || 'auto';
@@ -48,7 +52,28 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 2
   }
 }
 
-/** Source 1: Google Translate Public RPC (Ultra-fast) */
+/** Source 1: MyMemory Public Translation API (Globally reachable without VPN) */
+async function translateWithMyMemory(text: string, toLang = 'zh-CN'): Promise<{ translated: string; fromLang: string }> {
+  const target = toLang.startsWith('zh') ? 'zh-CN' : toLang;
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0, 500))}&langpair=en|${target}`;
+  const res = await fetchWithTimeout(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
+    },
+  }, 2500);
+
+  if (!res.ok) throw new Error(`MyMemory returned HTTP ${res.status}`);
+  const data = (await res.json()) as { responseData?: { translatedText?: string }; responseStatus?: number };
+  if (data.responseData?.translatedText && data.responseStatus === 200) {
+    const clean = data.responseData.translatedText.trim();
+    if (clean && !clean.startsWith('MYMEMORY WARNING')) {
+      return { translated: clean, fromLang: 'en' };
+    }
+  }
+  throw new Error('MyMemory translation invalid response');
+}
+
+/** Source 2: Google Translate Public RPC */
 async function translateWithGoogle(text: string, toLang = 'zh-CN'): Promise<{ translated: string; fromLang: string }> {
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(toLang)}&dt=t&q=${encodeURIComponent(text)}`;
   const res = await fetchWithTimeout(url, {
@@ -70,7 +95,7 @@ async function translateWithGoogle(text: string, toLang = 'zh-CN'): Promise<{ tr
   throw new Error('Google translate returned unexpected structure');
 }
 
-/** Source 2: Lingva Open Alternative Mirror */
+/** Source 3: Lingva Open Alternative Mirror */
 async function translateWithLingva(text: string, toLang = 'zh'): Promise<{ translated: string; fromLang: string }> {
   const cleanTo = toLang.startsWith('zh') ? 'zh' : toLang;
   const mirrors = [
@@ -98,7 +123,7 @@ async function translateWithLingva(text: string, toLang = 'zh'): Promise<{ trans
   throw new Error('All Lingva mirrors failed');
 }
 
-/** Source 3: User-defined Custom LLM (e.g. DeepSeek, OpenAI, Ollama) */
+/** Source 4: User-defined Custom LLM (DeepSeek, OpenAI, Ollama) */
 async function translateWithCustomLLM(
   text: string,
   config: TranslationConfig,
@@ -141,7 +166,7 @@ async function translateWithCustomLLM(
         temperature: 0.2,
       }),
     },
-    6000,
+    8000,
   );
 
   if (!res.ok) {
@@ -168,7 +193,7 @@ function translateWithLocalDict(text: string): string | null {
   return null;
 }
 
-/** Unified Multi-source Translation with Auto-Failover */
+/** Unified Multi-source Translation with Concurrent Race & Failover */
 export async function translateText(
   rawText: string,
   toLang = 'zh-CN',
@@ -215,13 +240,14 @@ export async function translateText(
         sourceUsed: `Custom LLM (${config.customModel || 'default'})`,
       };
     } catch (e) {
-      console.warn('Custom LLM translation failed, falling back to auto engines:', e);
+      console.warn('Custom LLM translation failed, falling back to public engines:', e);
     }
   }
 
-  // 3. Fast Concurrent Race & Failover (Google vs Lingva)
+  // 3. Concurrent Multi-Source Race (MyMemory + Google + Lingva)
   try {
     const winner = await Promise.any([
+      translateWithMyMemory(clean, toLang).then((r) => ({ ...r, source: 'MyMemory' })),
       translateWithGoogle(clean, toLang).then((r) => ({ ...r, source: 'Google Translate' })),
       translateWithLingva(clean, toLang).then((r) => ({ ...r, source: 'Lingva Mirror' })),
     ]);
@@ -252,14 +278,14 @@ export async function translateText(
     };
   }
 
-  // Graceful fallback: return original text
+  // Return original text if totally untranslatable
   return {
-    ok: true,
+    ok: false,
     original: clean,
     translated: clean,
     fromLang: 'en',
     toLang,
-    sourceUsed: 'Fallback (Original)',
+    error: '网络公共翻译接口连接超时，建议在设置中配置 DeepSeek API Key 开启大模型翻译',
   };
 }
 

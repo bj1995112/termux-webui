@@ -515,6 +515,9 @@ export default function TermView({ sessionId, active }: Props) {
           fixedCell = null;
           dragPointer = null;
           stopDragScroll();
+          if (term.hasSelection()) {
+            setShowBar(true);
+          }
         }
         return;
       }
@@ -700,12 +703,24 @@ export default function TermView({ sessionId, active }: Props) {
     const sel = term.getSelection().trim();
     if (!sel) return;
 
-    setSelectedTranslation({ original: sel, translated: '正在翻译...', loading: true });
+    setSelectedTranslation({ original: sel, translated: '正在联网翻译中...', loading: true });
     try {
       const translated = await translateText(sel);
-      setSelectedTranslation({ original: sel, translated, loading: false });
+      if (translated && translated !== sel) {
+        setSelectedTranslation({ original: sel, translated, loading: false });
+      } else {
+        setSelectedTranslation({
+          original: sel,
+          translated: '暂未获取到有效中文释义。若网络公共源受限，建议在左上角菜单「系统偏好」中配置 DeepSeek API Key 开启大模型高精度翻译。',
+          loading: false,
+        });
+      }
     } catch {
-      setSelectedTranslation({ original: sel, translated: '翻译失败，请稍后重试', loading: false });
+      setSelectedTranslation({
+        original: sel,
+        translated: '翻译请求超时。建议在左上角菜单中配置自定义 API (如 DeepSeek)。',
+        loading: false,
+      });
     }
   };
 
