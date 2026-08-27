@@ -784,7 +784,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                       </div>
                     </div>
                   )}
-                  {/* 📚 离线词库与自学习管理面板入口 */}
+                  {/* 🚀 AI 命令工坊 (Command Studio) 入口 */}
                   <div className="pt-2 border-t border-border/40">
                     <button
                       type="button"
@@ -792,11 +792,11 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                       className="flex w-full items-center justify-between rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-bold text-accent hover:bg-accent/20 active:scale-95 transition-all shadow-sm"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="text-sm">📚</span>
-                        <span>编程词典与自学习管理</span>
+                        <span className="text-sm">🚀</span>
+                        <span>AI 命令工坊 (Command Studio)</span>
                       </div>
                       <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent">
-                        2,580+ 词条
+                        全套斜杠命令 / 源码挖掘
                       </span>
                     </button>
                   </div>

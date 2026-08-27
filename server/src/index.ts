@@ -188,7 +188,7 @@ app.get('/api/dictionary/export', (c) => {
   return c.json(list);
 });
 
-// --- Official Dictionary Cloud Sync ---
+// --- Official Dictionary & Command Studio Sync ---
 app.get('/api/dictionary/sync-status', (c) => {
   return c.json({ ok: true, ...officialDictSync.getStatus() });
 });
@@ -196,6 +196,25 @@ app.get('/api/dictionary/sync-status', (c) => {
 app.post('/api/dictionary/sync', async (c) => {
   const result = await officialDictSync.syncLatest();
   return c.json(result);
+});
+
+app.post('/api/commands/sources', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { name?: string; url?: string; description?: string } | null;
+  if (!body?.name || !body?.url) return c.json({ error: 'name and url required' }, 400);
+  const newSource = await officialDictSync.addSource(body.name, body.url, body.description);
+  return c.json({ ok: true, source: newSource });
+});
+
+app.delete('/api/commands/sources/:id', async (c) => {
+  const ok = await officialDictSync.removeSource(c.req.param('id'));
+  return c.json({ ok }, ok ? 200 : 404);
+});
+
+app.post('/api/commands/mine', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as { text?: string } | null;
+  if (!body?.text) return c.json({ error: 'text required' }, 400);
+  const result = await officialDictSync.mineAndIngestText(body.text);
+  return c.json({ ok: true, ...result });
 });
 
 app.delete('/api/sessions/:id', (c) => {

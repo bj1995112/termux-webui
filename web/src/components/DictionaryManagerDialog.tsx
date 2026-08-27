@@ -1,372 +1,505 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useDeck } from '../store.js';
+
+interface CustomSource {
+  id: string;
+  name: string;
+  url: string;
+  description?: string;
+  lastScannedAt?: number;
+}
+
+interface LearnedEntry {
+  original: string;
+  translated: string;
+  timestamp?: number;
+}
 
 interface Props {
   open: boolean;
   onClose: () => void;
 }
 
-interface LearnedEntry {
-  original: string;
-  translated: string;
-  category?: string;
-  hitCount: number;
-  createdAt: number;
-  lastUsedAt: number;
-  source?: string;
-}
-
-interface SyncStatus {
-  lastSyncTime: number;
-  entryCount: number;
-  version: string;
-  isAutoSyncEnabled: boolean;
-}
-
-export const DictionaryManagerDialog: React.FC<Props> = ({ open, onClose }) => {
-  const [entries, setEntries] = useState<LearnedEntry[]>([]);
-  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+export function DictionaryManagerDialog({ open, onClose }: Props) {
+  const [tab, setTab] = useState<'commands' | 'sources' | 'miner' | 'learned'>('commands');
+  const [search, setSearch] = useState('');
   const [syncing, setSyncing] = useState(false);
-  const [query, setQuery] = useState('');
-  const [editItem, setEditItem] = useState<{ original: string; translated: string } | null>(null);
-  const [newOrig, setNewOrig] = useState('');
-  const [newTrans, setNewTrans] = useState('');
+  const [syncStatus, setSyncStatus] = useState<{
+    lastSyncTime?: number;
+    entryCount?: number;
+    version?: string;
+    sources?: CustomSource[];
+  }>({});
+
+  const [learnedList, setLearnedList] = useState<LearnedEntry[]>([]);
+
+  // Add command state
+  const [newCmd, setNewCmd] = useState('');
+  const [newZh, setNewZh] = useState('');
+
+  // Add source state
+  const [newSourceName, setNewSourceName] = useState('');
+  const [newSourceUrl, setNewSourceUrl] = useState('');
+
+  // Miner state
+  const [minerText, setMinerText] = useState('');
+  const [mining, setMining] = useState(false);
+  const [minedResults, setMinedResults] = useState<Array<{ cmd: string; zh: string }>>([]);
+
   const showToast = useDeck((s) => s.showToast);
 
-  const fetchDictionaryAndStatus = async () => {
-    setLoading(true);
+  const fetchStatus = async () => {
     try {
-      const token = localStorage.getItem('twui.token') || '';
-      const [resDict, resStatus] = await Promise.all([
-        fetch('/api/dictionary', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/dictionary/sync-status', { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
-      const dataDict = await resDict.json();
-      const dataStatus = await resStatus.json();
-
-      if (dataDict.ok && Array.isArray(dataDict.entries)) {
-        setEntries(dataDict.entries);
-      }
-      if (dataStatus.ok) {
-        setSyncStatus(dataStatus);
+      const res = await fetch('/api/dictionary/sync-status');
+      if (res.ok) {
+        const data = await res.json();
+        setSyncStatus(data);
       }
     } catch {
-      showToast('获取词库数据失败', 'error');
-    } finally {
-      setLoading(false);
+      /* ignore */
+    }
+  };
+
+  const fetchLearned = async () => {
+    try {
+      const res = await fetch('/api/dictionary/learned');
+      if (res.ok) {
+        const data = (await res.json()) as LearnedEntry[];
+        if (Array.isArray(data)) {
+          setLearnedList(data);
+        }
+      }
+    } catch {
+      /* ignore */
     }
   };
 
   useEffect(() => {
     if (open) {
-      void fetchDictionaryAndStatus();
+      void fetchLearned();
+      void fetchStatus();
     }
   }, [open]);
 
-  const handleCloudSync = async () => {
+  // One-click incremental sync
+  const handleSyncLatest = async () => {
     setSyncing(true);
-    showToast('正在从云端拉取最新官方词库...', 'info');
     try {
-      const token = localStorage.getItem('twui.token') || '';
-      const res = await fetch('/api/dictionary/sync', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch('/api/dictionary/sync', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        showToast(`✅ ${data.message}`, 'success');
-        void fetchDictionaryAndStatus();
+        showToast(data.message || '同步完成');
+        void fetchStatus();
+        void fetchLearned();
       } else {
-        showToast('云端同步失败，已保留本地词库', 'error');
+        showToast('同步失败，请检查网络');
       }
-    } catch (e) {
-      showToast(`同步请求异常: ${e instanceof Error ? e.message : String(e)}`, 'error');
+    } catch {
+      showToast('网络连接超时');
     } finally {
       setSyncing(false);
     }
   };
 
-  const filteredEntries = useMemo(() => {
-    if (!query.trim()) return entries;
-    const q = query.toLowerCase().trim();
-    return entries.filter(
-      (e) => e.original.toLowerCase().includes(q) || e.translated.toLowerCase().includes(q),
-    );
-  }, [entries, query]);
+  // Add custom command
+  const handleAddCommand = async () => {
+    const cmd = newCmd.trim();
+    const zh = newZh.trim();
+    if (!cmd || !zh) {
+      showToast('请完整输入命令与中文释义');
+      return;
+    }
+    const fullCmd = cmd.startsWith('/') ? cmd : `/${cmd}`;
+    const fullZh = `${fullCmd} ${zh}`;
+    try {
+      const res = await fetch('/api/dictionary/entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ original: fullCmd, translated: fullZh }),
+      });
+      if (res.ok) {
+        setNewCmd('');
+        setNewZh('');
+        showToast(`✅ 成功添加命令：${fullCmd}`);
+        void fetchLearned();
+        void fetchStatus();
+      }
+    } catch {
+      showToast('添加失败');
+    }
+  };
 
-  const handleSaveEntry = async (original: string, translated: string) => {
-    if (!original.trim() || !translated.trim()) {
-      showToast('原文与译文均不能为空', 'error');
+  // Add source repo
+  const handleAddSource = async () => {
+    if (!newSourceName.trim() || !newSourceUrl.trim()) {
+      showToast('请完整填写仓库名称与地址');
       return;
     }
     try {
-      const res = await fetch('/api/dictionary/entry', {
+      const res = await fetch('/api/commands/sources', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('twui.token') || ''}`,
-        },
-        body: JSON.stringify({ original: original.trim(), translated: translated.trim() }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newSourceName.trim(), url: newSourceUrl.trim() }),
       });
       if (res.ok) {
-        showToast('词条已保存并同步', 'success');
-        setEditItem(null);
-        setNewOrig('');
-        setNewTrans('');
-        void fetchDictionaryAndStatus();
+        showToast('✅ 成功添加源码监控仓库');
+        setNewSourceName('');
+        setNewSourceUrl('');
+        void fetchStatus();
       }
     } catch {
-      showToast('保存失败', 'error');
+      showToast('添加失败');
     }
   };
 
-  const handleDeleteEntry = async (original: string) => {
+  // Delete source repo
+  const handleDeleteSource = async (id: string) => {
+    try {
+      const res = await fetch(`/api/commands/sources/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast('已移除仓库');
+        void fetchStatus();
+      }
+    } catch {
+      showToast('移除失败');
+    }
+  };
+
+  // Delete learned entry
+  const handleDeleteLearned = async (orig: string) => {
     try {
       const res = await fetch('/api/dictionary/entry', {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('twui.token') || ''}`,
-        },
-        body: JSON.stringify({ original }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ original: orig }),
       });
       if (res.ok) {
-        showToast('词条已删除', 'info');
-        setEntries((prev) => prev.filter((e) => e.original !== original));
+        showToast('已删除词条');
+        void fetchLearned();
+        void fetchStatus();
       }
     } catch {
-      showToast('删除失败', 'error');
+      showToast('删除失败');
     }
   };
 
-  const handleExport = () => {
-    window.open('/api/dictionary/export', '_blank');
-  };
-
-  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // Mine commands from text
+  const handleMine = async () => {
+    if (!minerText.trim()) {
+      showToast('请粘贴包含斜杠命令的源码或文档');
+      return;
+    }
+    setMining(true);
     try {
-      const text = await file.text();
-      const list = JSON.parse(text);
-      if (!Array.isArray(list)) throw new Error('无效的 JSON 词库文件');
-
-      const res = await fetch('/api/dictionary/import', {
+      const res = await fetch('/api/commands/mine', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('twui.token') || ''}`,
-        },
-        body: JSON.stringify({ entries: list }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: minerText }),
       });
       const data = await res.json();
-      if (data.ok) {
-        showToast(`成功导入 ${data.importedCount} 条词条`, 'success');
-        void fetchDictionaryAndStatus();
+      if (data.ok && Array.isArray(data.added)) {
+        setMinedResults(data.added);
+        showToast(`🎉 成功萃取并自动汉化收录了 ${data.added.length} 条全新命令！`);
+        void fetchStatus();
+        void fetchLearned();
       }
-    } catch (e) {
-      showToast('导入失败：请检查文件格式', 'error');
+    } catch {
+      showToast('解析失败');
+    } finally {
+      setMining(false);
     }
   };
+
+  const filteredLearned = useMemo(() => {
+    if (!search.trim()) return learnedList;
+    const q = search.toLowerCase();
+    return learnedList.filter(
+      (e) => e.original.toLowerCase().includes(q) || e.translated.toLowerCase().includes(q),
+    );
+  }, [learnedList, search]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md animate-in fade-in">
-      <div className="flex h-[88vh] w-full max-w-2xl flex-col rounded-3xl border border-border/80 bg-panel/95 p-5 shadow-2xl backdrop-blur-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+      <div className="flex h-[88vh] w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-panel text-white shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border/40 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">📚</span>
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 bg-white/[0.02]">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">🚀</span>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-text">编程词典与自学习记忆库</h2>
-                <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-bold text-accent">
-                  官方 {syncStatus?.version || 'v1.1.0'}
-                </span>
-              </div>
-              <p className="text-[11px] text-muted">0ms 离线高精度翻译 · 一键云端同步 · 自动捕获新词</p>
+              <h2 className="text-base font-bold tracking-wide">AI 命令工坊 (Command Studio)</h2>
+              <p className="text-[11px] text-muted">
+                {syncStatus.entryCount ?? 0} 条标准命令 · 聚焦 Top 6 AI CLI · 0ms 流式秒翻
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={handleCloudSync}
+              onClick={() => void handleSyncLatest()}
               disabled={syncing}
-              className="flex items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/15 px-3 py-1.5 text-xs font-bold text-accent hover:bg-accent/25 active:scale-95 transition-all disabled:opacity-50 shadow-sm"
-              title="一键检查并同步官方最新词库"
+              className="flex items-center gap-1.5 rounded-lg bg-accent/20 px-3 py-1.5 text-xs font-medium text-accent border border-accent/30 hover:bg-accent hover:text-white transition disabled:opacity-50"
+              title="一键联网检测官方是否有新命令并自动增量同步"
             >
-              <span>{syncing ? '⏳' : '☁️'}</span>
-              <span>{syncing ? '同步中...' : '同步官方词库'}</span>
+              <span className={syncing ? 'animate-spin' : ''}>🔄</span>
+              <span>{syncing ? '检测同步中...' : '一键增量同步'}</span>
             </button>
             <button
               onClick={onClose}
-              className="rounded-xl p-1.5 text-muted hover:bg-panel2 hover:text-text active:scale-95 transition-all"
+              className="rounded-lg p-1.5 text-muted hover:bg-white/10 hover:text-white transition"
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-2.5 py-3">
-          <div className="rounded-2xl border border-accent/20 bg-accent/10 p-2.5 text-center">
-            <span className="text-[11px] text-accent font-medium">官方标准词库</span>
-            <p className="text-base font-bold text-accent">
-              {syncStatus?.entryCount ? `${syncStatus.entryCount}+ 词条` : '2,580+ 词条'}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-2.5 text-center">
-            <span className="text-[11px] text-emerald-400 font-medium">已自动学习</span>
-            <p className="text-base font-bold text-emerald-400">{entries.length} 词条</p>
-          </div>
-          <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 p-2.5 text-center">
-            <span className="text-[11px] text-sky-400 font-medium">本地离线响应</span>
-            <p className="text-base font-bold text-sky-400">0 ms 瞬发</p>
-          </div>
-        </div>
-
-        {/* Search & Actions Bar */}
-        <div className="flex items-center gap-2 pb-3">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              placeholder="搜索原文或中文译文..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full rounded-xl border border-border bg-panel2 px-3 py-1.5 text-xs text-text placeholder:text-muted focus:border-accent focus:outline-none"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-muted hover:text-text"
-              >
-                ✕
-              </button>
-            )}
-          </div>
+        {/* Tabs */}
+        <div className="flex border-b border-white/10 bg-black/20 px-4 pt-2 gap-2 text-xs">
           <button
-            onClick={handleExport}
-            className="flex items-center gap-1 rounded-xl border border-border bg-panel2 px-2.5 py-1.5 text-xs font-medium text-muted hover:text-text active:scale-95 transition-all"
-            title="导出词库 JSON 文件"
+            onClick={() => setTab('commands')}
+            className={`pb-2.5 px-3 font-medium border-b-2 transition ${
+              tab === 'commands'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-muted hover:text-white'
+            }`}
           >
-            <span>📥</span>
-            <span>导出</span>
+            ⚡ 命令速查 & 添加
           </button>
-          <label className="flex cursor-pointer items-center gap-1 rounded-xl border border-border bg-panel2 px-2.5 py-1.5 text-xs font-medium text-muted hover:text-text active:scale-95 transition-all">
-            <span>📤</span>
-            <span>导入</span>
-            <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-          </label>
-        </div>
-
-        {/* Add Entry Quick Box */}
-        <div className="mb-3 flex items-center gap-2 rounded-2xl border border-dashed border-accent/40 bg-accent/5 p-2.5">
-          <input
-            type="text"
-            placeholder="新增英文短语 (如 /help, Build failed)"
-            value={newOrig}
-            onChange={(e) => setNewOrig(e.target.value)}
-            className="flex-1 rounded-lg border border-border/80 bg-panel px-2.5 py-1 text-xs text-text placeholder:text-muted focus:outline-none"
-          />
-          <input
-            type="text"
-            placeholder="对应中文释义"
-            value={newTrans}
-            onChange={(e) => setNewTrans(e.target.value)}
-            className="flex-1 rounded-lg border border-border/80 bg-panel px-2.5 py-1 text-xs text-text placeholder:text-muted focus:outline-none"
-          />
           <button
-            onClick={() => handleSaveEntry(newOrig, newTrans)}
-            className="rounded-lg bg-accent px-3 py-1 text-xs font-bold text-white shadow active:bg-accent-hover"
+            onClick={() => setTab('sources')}
+            className={`pb-2.5 px-3 font-medium border-b-2 transition ${
+              tab === 'sources'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-muted hover:text-white'
+            }`}
           >
-            ➕ 添加
+            🌐 源码仓库源 ({syncStatus.sources?.length ?? 0})
+          </button>
+          <button
+            onClick={() => setTab('miner')}
+            className={`pb-2.5 px-3 font-medium border-b-2 transition ${
+              tab === 'miner'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-muted hover:text-white'
+            }`}
+          >
+            🔍 源码命令挖掘器
+          </button>
+          <button
+            onClick={() => setTab('learned')}
+            className={`pb-2.5 px-3 font-medium border-b-2 transition ${
+              tab === 'learned'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-muted hover:text-white'
+            }`}
+          >
+            🧠 自动发现库 ({learnedList.length})
           </button>
         </div>
 
-        {/* List of Entries */}
-        <div className="flex-1 overflow-y-auto pr-1 space-y-2">
-          {loading ? (
-            <div className="py-12 text-center text-xs text-muted">正在加载词库...</div>
-          ) : filteredEntries.length === 0 ? (
-            <div className="py-12 text-center text-xs text-muted">
-              {query ? '没有找到匹配的词条' : '暂无自学习词条，终端运行中将自动为您捕获积累！'}
-            </div>
-          ) : (
-            filteredEntries.map((item) => {
-              const isEditing = editItem?.original === item.original;
-              return (
-                <div
-                  key={item.original}
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-panel2/70 p-2.5 text-xs transition-all hover:border-accent/30"
-                >
-                  <div className="flex-1 min-w-0 pr-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono font-semibold text-text truncate">{item.original}</span>
-                      <span className="rounded bg-panel px-1.5 py-0.5 text-[9px] text-muted">
-                        命中 {item.hitCount} 次
-                      </span>
-                    </div>
-                    {isEditing ? (
-                      <div className="mt-1.5 flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          value={editItem.translated}
-                          onChange={(e) => setEditItem({ ...editItem, translated: e.target.value })}
-                          className="flex-1 rounded border border-accent bg-panel px-2 py-0.5 text-xs text-text focus:outline-none"
-                        />
-                        <button
-                          onClick={() => handleSaveEntry(item.original, editItem.translated)}
-                          className="rounded bg-accent px-2 py-0.5 text-[11px] font-bold text-white"
-                        >
-                          保存
-                        </button>
-                        <button
-                          onClick={() => setEditItem(null)}
-                          className="rounded bg-panel px-2 py-0.5 text-[11px] text-muted"
-                        >
-                          取消
-                        </button>
-                      </div>
-                    ) : (
-                      <p className="mt-0.5 text-accent font-medium truncate">{item.translated}</p>
-                    )}
-                  </div>
-                  {!isEditing && (
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => setEditItem({ original: item.original, translated: item.translated })}
-                        className="rounded p-1 text-muted hover:text-accent active:scale-95"
-                        title="编辑纠偏"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => handleDeleteEntry(item.original)}
-                        className="rounded p-1 text-muted hover:text-red-400 active:scale-95"
-                        title="删除词条"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  )}
+        {/* Tab Content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* TAB 1: Commands */}
+          {tab === 'commands' && (
+            <div className="space-y-4">
+              {/* Quick Add Form */}
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5 space-y-2.5">
+                <div className="text-xs font-semibold text-accent flex items-center gap-1.5">
+                  <span>➕</span>
+                  <span>添加自定义斜杠命令</span>
                 </div>
-              );
-            })
-          )}
-        </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="命令名 (例如 /mycmd)"
+                    value={newCmd}
+                    onChange={(e) => setNewCmd(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white placeholder-white/30 focus:border-accent focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="标准中文释义 (例如 执行自定义自动化流程)"
+                    value={newZh}
+                    onChange={(e) => setNewZh(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white placeholder-white/30 focus:border-accent focus:outline-none"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => void handleAddCommand()}
+                    className="rounded-lg bg-accent px-4 py-1 text-xs font-medium text-white hover:bg-accent-hover transition shadow"
+                  >
+                    保存命令
+                  </button>
+                </div>
+              </div>
 
-        {/* Footer */}
-        <div className="mt-3 flex items-center justify-between border-t border-border/40 pt-2 text-[11px] text-muted">
-          <span>💡 提示：在终端中使用的未知英文，系统翻译后将自动永久收录到此</span>
-          <button
-            onClick={onClose}
-            className="rounded-xl bg-panel2 px-4 py-1.5 text-xs font-semibold text-text hover:bg-border/60"
-          >
-            完成关闭
-          </button>
+              {/* Supported Tools Preset Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
+                  <div className="font-semibold text-cyan-400">🤖 OpenAI Codex</div>
+                  <div className="text-[11px] text-muted mt-0.5">/plan, /goal, /agents, /side, /copy, /export, /skills...</div>
+                </div>
+                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
+                  <div className="font-semibold text-amber-400">⚡ Claude Code</div>
+                  <div className="text-[11px] text-muted mt-0.5">/compact, /context, /resume, /fork, /rewind, /btw...</div>
+                </div>
+                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
+                  <div className="font-semibold text-emerald-400">🛠️ Aider Pair</div>
+                  <div className="text-[11px] text-muted mt-0.5">/add, /drop, /ls, /map, /code, /ask, /architect...</div>
+                </div>
+                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
+                  <div className="font-semibold text-blue-400">🎯 Cursor CLI</div>
+                  <div className="text-[11px] text-muted mt-0.5">/edit, /connect, /debug, /rename, /summarize, /rules...</div>
+                </div>
+                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
+                  <div className="font-semibold text-purple-400">💡 OpenCode</div>
+                  <div className="text-[11px] text-muted mt-0.5">/editor, /session, /switch, /attach, /history, /prune...</div>
+                </div>
+                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
+                  <div className="font-semibold text-pink-400">⚙️ 脚手架 & 环境</div>
+                  <div className="text-[11px] text-muted mt-0.5">Create-Vite, Next, Vue, React, Bun, Cargo, Docker...</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: Source Repositories */}
+          {tab === 'sources' && (
+            <div className="space-y-4">
+              {/* Add Source */}
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5 space-y-2.5">
+                <div className="text-xs font-semibold text-accent flex items-center gap-1.5">
+                  <span>➕</span>
+                  <span>添加自定义开源仓库监控</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="工具名称 (例如 MyAgent)"
+                    value={newSourceName}
+                    onChange={(e) => setNewSourceName(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white placeholder-white/30 focus:border-accent focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="GitHub Repo 或 本地路径"
+                    value={newSourceUrl}
+                    onChange={(e) => setNewSourceUrl(e.target.value)}
+                    className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white placeholder-white/30 focus:border-accent focus:outline-none"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => void handleAddSource()}
+                    className="rounded-lg bg-accent px-4 py-1 text-xs font-medium text-white hover:bg-accent-hover transition shadow"
+                  >
+                    添加监控源
+                  </button>
+                </div>
+              </div>
+
+              {/* Sources List */}
+              <div className="space-y-2">
+                {syncStatus.sources?.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-3 hover:border-white/10 transition"
+                  >
+                    <div>
+                      <div className="text-xs font-semibold text-white">{s.name}</div>
+                      <div className="text-[11px] text-muted truncate max-w-xs sm:max-w-md">{s.url}</div>
+                    </div>
+                    <button
+                      onClick={() => void handleDeleteSource(s.id)}
+                      className="rounded-lg px-2.5 py-1 text-[11px] text-red-400 hover:bg-red-500/20 transition"
+                    >
+                      移除
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: Command Miner */}
+          {tab === 'miner' && (
+            <div className="space-y-4">
+              <div className="text-xs text-muted">
+                💡 粘贴包含斜杠命令的 TypeScript、Python 源码或 Markdown 帮助文档，系统将**自动提取命令并调用引擎完成地道标准化汉化**入库！
+              </div>
+              <textarea
+                rows={6}
+                placeholder="在此粘贴源码（例如 program.command('/plan').description('switch to Plan mode') 或 /clear - reset context）..."
+                value={minerText}
+                onChange={(e) => setMinerText(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-xs text-white placeholder-white/30 focus:border-accent focus:outline-none font-mono"
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={() => void handleMine()}
+                  disabled={mining}
+                  className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-hover transition shadow disabled:opacity-50"
+                >
+                  <span className={mining ? 'animate-spin' : ''}>🔍</span>
+                  <span>{mining ? '智能解析萃取中...' : '开始萃取并汉化收录'}</span>
+                </button>
+              </div>
+
+              {minedResults.length > 0 && (
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] p-3 space-y-1.5">
+                  <div className="text-xs font-bold text-emerald-400">
+                    🎉 本次成功收录 {minedResults.length} 条全新命令：
+                  </div>
+                  <div className="max-h-40 overflow-y-auto space-y-1 text-xs">
+                    {minedResults.map((r, i) => (
+                      <div key={i} className="text-muted font-mono">
+                        {r.zh}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: Learned Entries */}
+          {tab === 'learned' && (
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="搜索自动发现或学习的命令..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white placeholder-white/30 focus:border-accent focus:outline-none"
+              />
+              {filteredLearned.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted">暂无符合条件的自动发现词条</div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredLearned.map((e) => (
+                    <div
+                      key={e.original}
+                      className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-2.5 hover:border-white/10 transition"
+                    >
+                      <div className="space-y-0.5 truncate max-w-xs sm:max-w-md">
+                        <div className="text-xs font-medium text-white truncate">{e.original}</div>
+                        <div className="text-[11px] text-accent truncate">{e.translated}</div>
+                      </div>
+                      <button
+                        onClick={() => void handleDeleteLearned(e.original)}
+                        className="text-[11px] text-red-400 hover:text-red-300 px-2 py-1"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
-};
+}
