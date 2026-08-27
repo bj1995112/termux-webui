@@ -282,6 +282,22 @@ export const CHINESE_SLASH_CMD_MAP: Record<string, string> = {
  * Applied exclusively to prompts and question dialogs, leaving interactive cursor lists pristine.
  */
 export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
+  // === Compact Menu Items (Word-Level) ===
+  'settings': '设置',
+  'models': '模型',
+  'scoped-models': '作用域模型',
+  'share': '分享',
+  'copy': '复制',
+  'fork': '派生',
+  'clone': '克隆',
+  'tree': '目录树',
+  'hotkeys': '快捷键',
+  'changelog': '更新日志',
+  'name': '命名',
+  'session': '会话',
+  'export': '导出',
+  'import': '导入',
+
   // === Prompts & CLI Questions ===
   '? Project name:': '? 项目名称：',
   '? Select a framework:': '? 选择框架：',

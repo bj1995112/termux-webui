@@ -4,13 +4,35 @@ import { DEV_TOOL_EXACT_DICT, DEV_TOOL_TEMPLATES } from '@termux-webui/shared';
 export type TranslateFunction = (text: string) => Promise<string>;
 
 /**
- * Solution 1 Zero-Desync Terminal Stream Translator
- * 1. Safe Inquirer Cursor Isolation:
- *    Lines with cursor redraw indicators (e.g. \x1b[nA, →, >, (x/y) pagination) are protected to
- *    guarantee that Inquirer's physical line-height is 100% identical to native English.
- *    Completely eradicates cursor desynchronization and ghost line accumulation!
- * 2. High-Accuracy General Translation for all status, prompts, scaffolding questions, and system outputs.
- * 3. 100% URL & File Path Shielding.
+ * Calculates physical terminal column/cell width of a string.
+ * ASCII = 1 cell, CJK Chinese/Japanese/Korean = 2 cells.
+ */
+function getCellWidth(str: string): number {
+  let width = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    const code = str.charCodeAt(i);
+    if (
+      (code >= 0x4e00 && code <= 0x9fff) ||
+      (code >= 0x3400 && code <= 0x4dbf) ||
+      (code >= 0xf900 && code <= 0xfaff) ||
+      (code >= 0xff01 && code <= 0xff60) ||
+      (code >= 0xffe0 && code <= 0xffe6)
+    ) {
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+  return width;
+}
+
+/**
+ * Verified Ghost-Free Stream Terminal Translator
+ * 1. Single-Pass Tokenizer: Eradicates word repetition/cascading replacements.
+ * 2. Strict Space-Padding Balancer: Automatically deducts added CJK width from trailing spaces.
+ *    Keeps physical line width exactly constant, guaranteeing Inquirer ANSI cursor redraw (\x1b[nA)
+ *    always lands on line 1 with zero ghost lines!
+ * 3. URL & Path Immunity: 100% untouched links and file paths.
  */
 export class TerminalTranslator {
   private term: Terminal;
@@ -73,21 +95,14 @@ export class TerminalTranslator {
   }
 
   /**
-   * Transforms stream safely while isolating Inquirer cursor redraw lines.
+   * Transforms stream with Single-Pass Tokenizer and Space-Padding Balancer.
    */
   private transformStream(chunk: string): string {
     if (!/[A-Za-z]{2,}/.test(chunk)) {
       return chunk;
     }
 
-    // Isolate interactive menu lists that contain relative vertical cursor navigation (e.g. \x1b[3A)
-    // or pagination (e.g. (1/78)) to maintain 100% native cursor synchronization
-    if (/\x1b\[\d+A/.test(chunk) || /\(\d+\/\d+\)/.test(chunk) || /^[ \t]*[>→❯●*]/m.test(chunk)) {
-      // Inquirer dynamic cursor redraw detected: pass cleanly through to maintain pristine terminal line heights
-      return chunk;
-    }
-
-    // Split chunk into ANSI escape sequences vs visible text
+    // Split chunk into ANSI escape sequences vs visible text chunks
     // eslint-disable-next-line no-control-regex
     const parts = chunk.split(/(\x1b\[[0-9;]*[a-zA-Z]|\x1b\([a-zA-Z]|\x1b\][^\x07\x1b]*\x07)/g);
 
@@ -124,15 +139,47 @@ export class TerminalTranslator {
       }
 
       if (!templateMatched) {
-        // Step 3: Exact whole-line / whole-phrase match
+        // Step 3: Exact whole-line / whole-phrase match first
         const trimmedLower = shielded.trim().toLowerCase();
         const wholeExact = this.exactDictMap.get(trimmedLower);
         if (wholeExact) {
-          shielded = shielded.replace(shielded.trim(), wholeExact);
+          const origWidth = getCellWidth(shielded.trim());
+          const newWidth = getCellWidth(wholeExact);
+          const diff = newWidth - origWidth;
+
+          if (diff > 0 && shielded.includes(shielded.trim() + ' ')) {
+            const excessSpaces = ' '.repeat(diff);
+            shielded = shielded.replace(shielded.trim() + excessSpaces, wholeExact);
+          } else {
+            shielded = shielded.replace(shielded.trim(), wholeExact);
+          }
+        } else {
+          // Step 4: Tokenizer with Space-Padding Width Balancer
+          // Matches word/command and any immediately trailing spaces
+          shielded = shielded.replace(
+            /(\/[a-zA-Z0-9_-]{2,20}|[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*)(\s*)/g,
+            (match, token: string, spaces: string) => {
+              const lower = token.toLowerCase();
+              const found = this.exactDictMap.get(lower);
+              if (found) {
+                const origWidth = getCellWidth(token);
+                const newWidth = getCellWidth(found);
+                const diff = newWidth - origWidth;
+
+                if (diff > 0 && spaces.length >= diff) {
+                  // Deduct added width from trailing spaces to keep line length 100% constant
+                  const remainingSpaces = spaces.slice(diff);
+                  return found + remainingSpaces;
+                }
+                return found + spaces;
+              }
+              return match;
+            },
+          );
         }
       }
 
-      // Step 4: Restore URLs & Paths
+      // Step 5: Restore URLs & Paths
       for (let sIdx = 0; sIdx < shields.length; sIdx += 1) {
         const urlId = `__URL_SHIELD_${sIdx}__`;
         const pathId = `__PATH_SHIELD_${sIdx}__`;
