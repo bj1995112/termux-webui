@@ -206,11 +206,15 @@ export default function TermView({ sessionId, active }: Props) {
     }
 
     term.open(host);
-    term.onData((data) => deckSocket.send({ type: 'input', sessionId, data }));
-
     const pipeline = new TerminalStreamPipeline(term, translateText, setAnchors);
     pipelineRef.current = pipeline;
     requestAnimationFrame(() => pipeline.refresh());
+
+    term.onData((data) => {
+      deckSocket.send({ type: 'input', sessionId, data });
+      pipeline.onUserInput();
+    });
+    term.onCursorMove(() => pipeline.onUserInput());
 
     const fitNow = () => {
       if (host.clientWidth > 0 && host.clientHeight > 0) {

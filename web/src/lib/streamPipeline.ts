@@ -13,8 +13,8 @@ export interface TranslationAnchor {
 export type TranslateFunction = (text: string) => Promise<string>;
 
 /**
- * Terminal Stream Pipeline & Anchor Generator
- * Analyzes terminal output stream in parallel without touching or mutating original raw bytes.
+ * High-Speed Reactive Terminal Stream Pipeline
+ * Provides ultra-responsive 30ms anchor synchronization for interactive menus (TUI / arrow keys).
  */
 export class TerminalStreamPipeline {
   private term: Terminal;
@@ -34,12 +34,24 @@ export class TerminalStreamPipeline {
     this.onAnchorsChange = onAnchorsChange;
   }
 
+  /** Called when new PTY output arrives */
   public feed(): void {
     if (this.debounceTimer) window.clearTimeout(this.debounceTimer);
+    // Ultra-fast 30ms throttle for instant responsive menu switching
     this.debounceTimer = window.setTimeout(() => {
       this.debounceTimer = null;
       void this.extractAndTranslateAnchors();
-    }, 120);
+    }, 30);
+  }
+
+  /** Called immediately when user presses a key (e.g. arrow keys / Enter) */
+  public onUserInput(): void {
+    if (this.debounceTimer) {
+      window.clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    // Instantly refresh anchors to reflect new cursor and highlight state
+    void this.extractAndTranslateAnchors();
   }
 
   public clear(): void {
