@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useDeck } from '../store.js';
+import { DETAILED_COMMAND_HELP_MAP } from '@termux-webui/shared';
 
 interface CustomSource {
   id: string;
@@ -20,7 +21,7 @@ interface Props {
   onClose: () => void;
 }
 
-// Authenticated Fetch Helper that attaches Bearer Token
+// Authenticated Fetch Helper
 async function authFetch(url: string, init?: RequestInit): Promise<Response> {
   const token = localStorage.getItem('twui.token') || '';
   const headers = new Headers(init?.headers || {});
@@ -105,7 +106,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
         showToast(`同步响应：${data.message || '未发现更新'}`);
       }
     } catch {
-      showToast('网络连接超时，请重试');
+      showToast('网络连接超时');
     } finally {
       setSyncing(false);
     }
@@ -158,11 +159,9 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
         setNewSourceName('');
         setNewSourceUrl('');
         void fetchStatus();
-      } else {
-        showToast('添加失败');
       }
     } catch {
-      showToast('请求异常');
+      showToast('添加失败');
     }
   };
 
@@ -226,6 +225,24 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
     }
   };
 
+  // Full detailed command help list with search filter
+  const commandHelpList = useMemo(() => {
+    const list = Object.entries(DETAILED_COMMAND_HELP_MAP).map(([key, item]) => ({
+      key,
+      ...item,
+    }));
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter(
+      (c) =>
+        c.key.toLowerCase().includes(q) ||
+        c.enCmd.toLowerCase().includes(q) ||
+        c.title.toLowerCase().includes(q) ||
+        c.desc.toLowerCase().includes(q) ||
+        (c.usage && c.usage.toLowerCase().includes(q)),
+    );
+  }, [search]);
+
   const filteredLearned = useMemo(() => {
     if (!search.trim()) return learnedList;
     const q = search.toLowerCase();
@@ -237,16 +254,16 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-      <div className="flex h-[88vh] w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-panel text-white shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4 animate-fade-in">
+      <div className="flex h-[90vh] w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-panel text-white shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 bg-white/[0.02]">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 sm:px-5 py-3.5 bg-white/[0.02]">
           <div className="flex items-center gap-2.5">
             <span className="text-xl">🚀</span>
             <div>
               <h2 className="text-base font-bold tracking-wide">AI 命令工坊 (Command Studio)</h2>
               <p className="text-[11px] text-muted">
-                {syncStatus.entryCount ?? 0} 条标准命令 · 聚焦 Top 6 AI CLI · 0ms 流式秒翻
+                {Object.keys(DETAILED_COMMAND_HELP_MAP).length} 条标准命令详解 · 聚焦 Top 6 AI CLI
               </p>
             </div>
           </div>
@@ -258,7 +275,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
               title="一键联网检测官方是否有新命令并自动增量同步"
             >
               <span className={syncing ? 'animate-spin' : ''}>🔄</span>
-              <span>{syncing ? '检测同步中...' : '一键增量同步'}</span>
+              <span>{syncing ? '检测中...' : '增量同步'}</span>
             </button>
             <button
               onClick={onClose}
@@ -270,20 +287,20 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-white/10 bg-black/20 px-4 pt-2 gap-2 text-xs">
+        <div className="flex border-b border-white/10 bg-black/20 px-4 pt-2 gap-2 text-xs overflow-x-auto">
           <button
             onClick={() => setTab('commands')}
-            className={`pb-2.5 px-3 font-medium border-b-2 transition ${
+            className={`pb-2.5 px-3 font-medium border-b-2 whitespace-nowrap transition ${
               tab === 'commands'
                 ? 'border-accent text-accent'
                 : 'border-transparent text-muted hover:text-white'
             }`}
           >
-            ⚡ 命令速查 & 添加
+            📖 全部命令详解 ({commandHelpList.length})
           </button>
           <button
             onClick={() => setTab('sources')}
-            className={`pb-2.5 px-3 font-medium border-b-2 transition ${
+            className={`pb-2.5 px-3 font-medium border-b-2 whitespace-nowrap transition ${
               tab === 'sources'
                 ? 'border-accent text-accent'
                 : 'border-transparent text-muted hover:text-white'
@@ -293,7 +310,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
           </button>
           <button
             onClick={() => setTab('miner')}
-            className={`pb-2.5 px-3 font-medium border-b-2 transition ${
+            className={`pb-2.5 px-3 font-medium border-b-2 whitespace-nowrap transition ${
               tab === 'miner'
                 ? 'border-accent text-accent'
                 : 'border-transparent text-muted hover:text-white'
@@ -303,7 +320,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
           </button>
           <button
             onClick={() => setTab('learned')}
-            className={`pb-2.5 px-3 font-medium border-b-2 transition ${
+            className={`pb-2.5 px-3 font-medium border-b-2 whitespace-nowrap transition ${
               tab === 'learned'
                 ? 'border-accent text-accent'
                 : 'border-transparent text-muted hover:text-white'
@@ -314,12 +331,32 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* TAB 1: Commands */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+          {/* TAB 1: Commands Full Encyclopedia */}
           {tab === 'commands' && (
-            <div className="space-y-4">
-              {/* Quick Add Form */}
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5 space-y-2.5">
+            <div className="space-y-3.5">
+              {/* Search Bar */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="搜索命令名、中文释义或功能关键词 (例如 /plan, 规划, 模型, settings)..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 pl-9 text-xs text-white placeholder-white/40 focus:border-accent focus:outline-none"
+                />
+                <span className="absolute left-3 top-2.5 text-xs text-muted">🔍</span>
+                {search && (
+                  <button
+                    onClick={() => setSearch('')}
+                    className="absolute right-3 top-2 text-xs text-muted hover:text-white"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Add Custom Command */}
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2">
                 <div className="text-xs font-semibold text-accent flex items-center gap-1.5">
                   <span>➕</span>
                   <span>添加自定义斜杠命令</span>
@@ -343,39 +380,57 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
                 <div className="flex justify-end">
                   <button
                     onClick={() => void handleAddCommand()}
-                    className="rounded-lg bg-accent px-4 py-1 text-xs font-medium text-white hover:bg-accent-hover transition shadow"
+                    className="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover transition shadow"
                   >
                     保存命令
                   </button>
                 </div>
               </div>
 
-              {/* Supported Tools Preset Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
-                  <div className="font-semibold text-cyan-400">🤖 OpenAI Codex</div>
-                  <div className="text-[11px] text-muted mt-0.5">/plan, /goal, /agents, /side, /copy, /export, /skills...</div>
-                </div>
-                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
-                  <div className="font-semibold text-amber-400">⚡ Claude Code</div>
-                  <div className="text-[11px] text-muted mt-0.5">/compact, /context, /resume, /fork, /rewind, /btw...</div>
-                </div>
-                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
-                  <div className="font-semibold text-emerald-400">🛠️ Aider Pair</div>
-                  <div className="text-[11px] text-muted mt-0.5">/add, /drop, /ls, /map, /code, /ask, /architect...</div>
-                </div>
-                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
-                  <div className="font-semibold text-blue-400">🎯 Cursor CLI</div>
-                  <div className="text-[11px] text-muted mt-0.5">/edit, /connect, /debug, /rename, /summarize, /rules...</div>
-                </div>
-                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
-                  <div className="font-semibold text-purple-400">💡 OpenCode</div>
-                  <div className="text-[11px] text-muted mt-0.5">/editor, /session, /switch, /attach, /history, /prune...</div>
-                </div>
-                <div className="p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
-                  <div className="font-semibold text-pink-400">⚙️ 脚手架 & 环境</div>
-                  <div className="text-[11px] text-muted mt-0.5">Create-Vite, Next, Vue, React, Bun, Cargo, Docker...</div>
-                </div>
+              {/* Detailed Command List */}
+              <div className="space-y-2.5">
+                {commandHelpList.map((cmd) => (
+                  <div
+                    key={cmd.key}
+                    className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5 space-y-2 hover:border-accent/40 transition"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md bg-accent/20 px-2 py-0.5 font-mono text-xs font-bold text-accent border border-accent/30">
+                          {cmd.enCmd}
+                        </span>
+                        <span className="text-xs font-bold text-white tracking-wide">
+                          {cmd.title}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(cmd.enCmd);
+                          showToast(`已复制命令：${cmd.enCmd}`);
+                        }}
+                        className="rounded-lg border border-white/10 px-2 py-0.5 text-[11px] text-muted hover:text-white hover:bg-white/5 transition"
+                      >
+                        📋 复制
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-white/80 leading-relaxed">{cmd.desc}</p>
+
+                    {cmd.usage && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-300/90 bg-black/20 px-2.5 py-1 rounded-lg">
+                        <span className="text-muted">用法:</span>
+                        <code>{cmd.usage}</code>
+                      </div>
+                    )}
+
+                    {cmd.tip && (
+                      <div className="flex items-start gap-1.5 text-[11px] text-amber-300/90 bg-amber-500/[0.05] p-2 rounded-lg border border-amber-500/10">
+                        <span>💡</span>
+                        <span>{cmd.tip}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -441,7 +496,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
           {/* TAB 3: Command Miner */}
           {tab === 'miner' && (
             <div className="space-y-4">
-              <div className="text-xs text-muted">
+              <div className="text-xs text-muted leading-relaxed">
                 💡 粘贴包含斜杠命令的 TypeScript、Python 源码或 Markdown 帮助文档，系统将**自动提取命令并调用引擎完成地道标准化汉化**入库！
               </div>
               <textarea
