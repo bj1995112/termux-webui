@@ -9,6 +9,10 @@ interface Props {
   renderTick?: number;
 }
 
+/**
+ * Pure Clean Translation Overlay
+ * Renders pixel-perfect in-place Chinese translations matching terminal native typography.
+ */
 export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true, renderTick = 0 }) => {
   const visibleAnchors = useMemo(() => {
     if (!term || !visible || anchors.length === 0) return [];
@@ -43,8 +47,7 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true, 
   const screenOffsetTop = screenEl?.offsetTop ?? 0;
   const rowDivs = rowsEl ? (Array.from(rowsEl.children) as HTMLElement[]) : [];
 
-  const buf = term.buffer.active;
-  const viewportY = buf.viewportY;
+  const viewportY = term.buffer.active.viewportY;
   const themeBg = term.options.theme?.background || '#1a1b26';
 
   return (
@@ -66,32 +69,6 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true, 
         // Solid background mask to completely conceal underlying English characters
         const minMaskWidth = (anchor.endCol - anchor.startCol) * cellWidth;
 
-        // Accurate Detection for Menu Items:
-        // Ignore box-drawing border title lines (e.g. │ >_ OpenAI Codex │)
-        const isBoxBorder = anchor.originalText.includes('│') || anchor.originalText.includes('─');
-        let isAnsiSelected = false;
-
-        if (!isBoxBorder) {
-          const line = buf.getLine(anchor.bufferRow);
-          if (line) {
-            // Check if line starts with real interactive selection arrows: ❯, >, ●, *, ✔, [x]
-            const rawText = line.translateToString(true).trim();
-            if (/^[❯>●*✔✓]\s*|^\([x*]\)|^\s*>\s+\w+/i.test(rawText)) {
-              isAnsiSelected = true;
-            } else {
-              // Check cell-level ANSI inverse / highlight background
-              const checkLen = Math.min(line.length, anchor.endCol);
-              for (let col = anchor.startCol; col < checkLen; col += 1) {
-                const cell = line.getCell(col);
-                if (cell && (cell.isInverse() || (cell.getBgColor() !== -1 && cell.getBgColor() !== 0))) {
-                  isAnsiSelected = true;
-                  break;
-                }
-              }
-            }
-          }
-        }
-
         return (
           <div
             key={anchor.id}
@@ -102,21 +79,16 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true, 
               height: `${height}px`,
               lineHeight: `${height}px`,
               minWidth: `${minMaskWidth}px`,
-              padding: '0 6px',
+              padding: '0 2px',
               whiteSpace: 'pre',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               fontFamily: term.options.fontFamily || 'monospace',
               fontSize: `${term.options.fontSize}px`,
-              // Distinct visual styles for active selected item vs regular items
-              color: isAnsiSelected ? '#ffffff' : 'var(--text, #c0caf5)',
-              fontWeight: isAnsiSelected ? 700 : 400,
-              background: isAnsiSelected ? 'rgba(59, 130, 246, 0.40)' : themeBg,
-              borderLeft: isAnsiSelected ? '4px solid #3b82f6' : 'none',
-              boxShadow: isAnsiSelected ? '0 0 16px rgba(59, 130, 246, 0.45)' : 'none',
-              borderRadius: isAnsiSelected ? '3px' : '0px',
-              zIndex: isAnsiSelected ? 40 : 35,
-              transition: 'background 0.08s ease, border-color 0.08s ease, color 0.08s ease',
+              color: 'var(--text, #c0caf5)',
+              fontWeight: 400,
+              background: themeBg,
+              zIndex: 35,
             }}
           >
             {anchor.translatedText}
