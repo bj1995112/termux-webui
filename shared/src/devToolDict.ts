@@ -1,17 +1,17 @@
 /**
  * Comprehensive Developer IT & CLI Terminology Dictionary
- * Covers Codex, Claude CLI, Vite, Next, Vue, React, Git, Linux, Docker, Rust, Go, Python.
+ * Covers Codex, Claude Code, Aider, Vite, Next.js, Vue, React, Bun, uv, Rust Cargo, Python, Docker, Git, Linux.
  * Supports 0ms zero-latency exact match & dynamic template interpolation.
  */
 
 export interface DictEntry {
   original: string;
   translated: string;
-  category?: 'ai_cli' | 'scaffold' | 'git' | 'linux' | 'package_mgr' | 'compiler' | 'general';
+  category?: 'ai_cli' | 'scaffold' | 'git' | 'linux' | 'package_mgr' | 'compiler' | 'database' | 'general';
 }
 
 export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
-  // === 1. AI CLI Assistants (OpenAI Codex, Claude CLI, Aider, Cursor) ===
+  // === 1. AI CLI Assistants (Claude Code, OpenAI Codex, Aider, Cursor, Copilot) ===
   '/plan': '/plan 切换到规划模式 (Plan Mode)',
   '/goal': '/goal 设置或查看长时间运行任务的目标',
   '/agents': '/agents 查看并在所有活跃的 Agent 会话间切换',
@@ -27,6 +27,15 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   '/undo': '/undo 撤销上一步代码变更',
   '/test': '/test 运行自动化测试套件',
   '/commit': '/commit 智能生成提交信息并执行 Git 提交',
+  '/compact': '/compact 压缩对话历史以释放上下文空间',
+  '/context': '/context 查看当前上下文 Token 占用可视化图表',
+  '/rewind': '/rewind 撤销代码变更并回退到上一个检查点',
+  '/checkpoint': '/checkpoint 查看或创建会话快照检查点',
+  '/btw': '/btw 快速向 AI 提问副问题 (不占用主上下文)',
+  '/chat-mode': '/chat-mode 切换对话模式 (代码/提问/架构/帮助)',
+  '/add': '/add 将指定文件添加到 AI 对话上下文中',
+  '/drop': '/drop 从 AI 对话上下文中移除指定文件',
+  '/map': '/map 打印当前代码仓库的完整依赖拓扑结构图',
   'switch to Plan mode': '切换到规划模式 (Plan Mode)',
   'set or view the goal for a long-running task': '设置或查看长时间运行任务的目标',
   'view and switch between all active agent': '查看并在所有活跃的 Agent 会话间切换',
@@ -46,16 +55,22 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'Context 0% used': '上下文已使用 0%',
   'Please select an option': '请选择一个选项',
   'Please select your preferred framework': '请选择您偏好的前端框架',
+  'Applying patch to...': '正在将 AI 生成的代码补丁应用到文件...',
+  'Reject change [y/n/e]?': '是否拒绝此代码更改 [y(是)/n(否)/e(手动编辑)]?',
 
-  // === 2. Modern Frontend & Scaffolding (Create-Vite, Next, Vue, React, Inquirer) ===
+  // === 2. Modern Frontend & Scaffolding (Create-Vite, Next, Vue, React, Bun, Inquirer) ===
   '? Project name:': '? 项目名称：',
   '? Select a framework:': '? 请选择前端框架：',
   '? Select a variant:': '? 请选择开发语言变体 (TypeScript / JavaScript)：',
   '? Use TypeScript?': '? 是否使用 TypeScript？',
   '? Use ESLint to lint your code?': '? 是否启用 ESLint 代码规范检查？',
   '? Use Tailwind CSS for styling?': '? 是否启用 Tailwind CSS 样式库？',
-  '? Would you like to customize the default import alias?': '? 是否自定义模块导入路径别名？',
+  '? Would you like to use App Router? (recommended)': '? 是否使用 App Router 现代应用路由架构？(推荐)',
+  '? Would you like to use Turbopack for next dev?': '? 是否启用 Turbopack 极速开发编译器？',
+  '? Would you like to customize the default import alias (@/*)?': '? 是否自定义模块导入路径别名 (@/*)？',
   '? What is your project named?': '? 您的项目名称是什么？',
+  '? Initialize a new git repository?': '? 是否自动初始化 Git 代码仓库？',
+  '? Select package manager:': '? 请选择依赖包管理器 (pnpm / npm / yarn / bun)：',
   'Select a framework:': '选择前端项目框架：',
   'Select a variant:': '选择开发语言变体 (TypeScript / JavaScript)：',
   'Vanilla': '原生 JavaScript/TypeScript',
@@ -74,6 +89,8 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'Next.js': 'Next.js (企业级全栈 React 框架)',
   'Install dependencies?': '是否立即安装依赖包？',
   'dev server running at:': '开发服务器已启动于：',
+  'Local:': '本地访问地址：',
+  'Network:': '局域网访问地址：',
   'Network: use --host to expose': '局域网访问：添加 --host 参数以向局域网暴露服务',
   'press h + enter to show help': '按 h + 回车查看可用快捷键菜单',
   'press q to quit': '按 q 退出服务',
@@ -88,6 +105,7 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'Your branch is up to date with': '您的分支已与远程分支保持最新',
   'Your branch is ahead of': '您的分支领先于远程分支',
   'Your branch is behind': '您的分支落后于远程分支',
+  "Your branch and 'origin/main' have diverged": "本地分支与远程分支出现分叉 (存在不同的提交)",
   'Changes not staged for commit:': '已修改但尚未暂存的更改 (使用 git add 暂存)：',
   'Changes to be committed:': '待提交的暂存更改 (使用 git commit 提交)：',
   'Untracked files:': '未跟踪的新文件 (使用 git add 纳入版本控制)：',
@@ -104,7 +122,26 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'all conflicts fixed: run "git rebase --continue"': '所有冲突已解决：请执行 "git rebase --continue" 继续',
   'git push --set-upstream origin': '请使用 git push --set-upstream origin 建立上游关联',
 
-  // === 4. Linux Core & Package Managers (apt, bash, npm, pnpm, cargo, pip) ===
+  // === 4. Rust Compiler & Toolchain (Cargo, rustc, Clippy) ===
+  'borrow of moved value': '借用了已被移动所有权的值 (所有权冲突)',
+  'cannot borrow as mutable more than once at a time': '同一时间不能对同一变量进行多次可变借用',
+  'lifetime may not live long enough': '生命周期可能不够长 (变量存活期超出预期)',
+  'consider cloning the value if the performance cost is acceptable': '建议：若性能开销可接受，可考虑使用 .clone() 复制该值',
+  'consider borrowing here': '建议：在此处使用引用 (&) 进行借用',
+  'cargo clippy --fix': '自动应用 Clippy 建议的代码优化补丁',
+
+  // === 5. Python & Backend Frameworks (FastAPI, Pytest, Uvicorn, Poetry) ===
+  'Application startup complete.': '应用程序启动完成，已进入就绪监听状态',
+  'Waiting for application shutdown.': '正在等待应用程序安全关闭并释放连接池...',
+  'RuntimeError: Event loop is closed': '运行时错误：AsyncIO 异步事件循环已提前关闭',
+
+  // === 6. Docker & Containers ===
+  'Container Creating': '容器正在创建中...',
+  'Container Started': '容器已成功启动',
+  'Container Healthy': '容器健康检查通过 (服务正常运行)',
+  'Cannot connect to the Docker daemon': '无法连接到 Docker 守护进程 (请确认 Docker 服务已启动)',
+
+  // === 7. Linux Core, System & Network ===
   'Permission denied': '权限被拒绝 (请检查文件读写执行权限或使用 sudo/su)',
   'No such file or directory': '没有该文件或目录 (请检查路径拼写)',
   'Command not found': '未找到该命令 (请检查拼写或使用 apt install 安装)',
@@ -112,6 +149,10 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'Connection refused': '连接被拒绝 (目标服务未启动或端口被防火墙拦截)',
   'Connection timed out': '连接超时 (网络不可达或对端无响应)',
   'Address already in use': '端口已被占用 (请先关闭冲突进程)',
+  'Too many open files': '打开的文件句柄数已达系统上限 (ulimit)',
+  'Name or service not known': '域名解析失败或 DNS 服务不可达',
+  'Temporary failure in name resolution': 'DNS 域名解析暂时性失败 (请检查 /etc/resolv.conf)',
+  'No route to host': '无通往目标主机的网络路由 (对端离线或防火墙阻断)',
   'File exists': '文件已存在',
   'Directory not empty': '目录非空',
   'Is a directory': '这是一个目录',
@@ -120,7 +161,6 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'No space left on device': '磁盘空间已耗尽',
   'Operation not permitted': '操作不被允许',
   'Resource temporarily unavailable': '系统资源暂时不可用',
-  'Cannot connect to the Docker daemon': '无法连接到 Docker 守护进程 (请确认 Docker 服务已启动)',
   'Segmentation fault (core dumped)': '段错误 (内存非法访问，核心已转储)',
   'npm ERR!': 'npm 报错',
   'found 0 vulnerabilities': '已完成安全审计：未发现安全漏洞',
@@ -159,8 +199,18 @@ export const DEV_TOOL_TEMPLATES: Array<{ pattern: RegExp; replace: (...args: str
     replace: (_, percent) => `上下文已使用 ${percent}%`,
   },
   {
+    // Tokens: 1250 / 8000 used (15%)
+    pattern: /^Tokens:\s*([\d,]+)\s*\/\s*([\d,]+)\s+used\s*\(([\d.]+)%\)/i,
+    replace: (_, used, total, pct) => `Token 用量：${used} / ${total} 已使用 (${pct}%)`,
+  },
+  {
     // Building for production...
     pattern: /^Building for production\.{3}/i,
     replace: () => '正在进行生产环境全量打包编译...',
+  },
+  {
+    // HMR update /src/App.tsx
+    pattern: /^HMR update\s+(.+)$/i,
+    replace: (_, file) => `模块热替换 (HMR)：已更新 ${file}`,
   },
 ];
