@@ -20,8 +20,6 @@ export default function App() {
   const isAuthenticated = useDeck((s) => s.isAuthenticated);
   const keyboardVisible = useDeck((s) => s.keyboardVisible);
   const toggleKeyboard = useDeck((s) => s.toggleKeyboard);
-  const isTranslatingScreen = useDeck((s) => s.isTranslatingScreen);
-  const toggleScreenTranslation = useDeck((s) => s.toggleScreenTranslation);
   const [showNew, setShowNew] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
@@ -83,20 +81,6 @@ export default function App() {
 
         {/* Right Actions */}
         <div className="ml-auto flex items-center gap-1.5">
-          {active && (
-            <button
-              onClick={() => toggleScreenTranslation()}
-              className={`flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-semibold shadow-sm active:scale-95 transition-all ${
-                isTranslatingScreen
-                  ? 'border-accent bg-accent text-white ring-2 ring-accent/30'
-                  : 'border-border bg-panel2 text-muted hover:text-text'
-              }`}
-              title="切换全屏 1:1 原位翻译 (多源自动故障转移)"
-            >
-              <span>🌐</span>
-              <span>{isTranslatingScreen ? '原位翻译中' : '译'}</span>
-            </button>
-          )}
 
           <button
             onClick={() => setShowNew(true)}

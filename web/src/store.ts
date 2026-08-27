@@ -35,11 +35,9 @@ interface DeckState {
   setFontSize: (size: number) => void;
   resetFontSize: () => void;
 
-  // Translation System
+  // Translation System (Word Selection Translation)
   translationConfig: TranslationConfig;
   setTranslationConfig: (cfg: Partial<TranslationConfig>) => void;
-  isTranslatingScreen: boolean;
-  toggleScreenTranslation: (force?: boolean) => void;
   translateText: (text: string, toLang?: string) => Promise<string>;
 
   // Toast
@@ -130,7 +128,6 @@ export const useDeck = create<DeckState>((set, get) => {
         return { provider: 'auto' };
       }
     })(),
-    isTranslatingScreen: false,
     toast: null,
     previewDetail: null,
 
@@ -140,12 +137,6 @@ export const useDeck = create<DeckState>((set, get) => {
       localStorage.setItem('twui.transConfig', JSON.stringify(updated));
       set({ translationConfig: updated });
       get().showToast('翻译引擎配置已更新', 'success');
-    },
-
-    toggleScreenTranslation: (force?: boolean) => {
-      const next = typeof force === 'boolean' ? force : !get().isTranslatingScreen;
-      set({ isTranslatingScreen: next });
-      get().showToast(next ? '🌐 全屏原位翻译已开启' : '🌐 已切回原生英文终端', 'info');
     },
 
     translateText: async (text: string, toLang = 'zh-CN') => {

@@ -7,7 +7,6 @@ import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
 import { THEMES } from '../theme.js';
-import { ChromeStyleDOMTranslator } from '../lib/domTranslator.js';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
@@ -119,8 +118,6 @@ export default function TermView({ sessionId, active }: Props) {
     loading: boolean;
   } | null>(null);
 
-  const isTranslatingScreen = useDeck((s) => s.isTranslatingScreen);
-  const toggleScreenTranslation = useDeck((s) => s.toggleScreenTranslation);
   const translateText = useDeck((s) => s.translateText);
 
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
@@ -134,7 +131,6 @@ export default function TermView({ sessionId, active }: Props) {
   const sessions = useDeck((s) => s.sessions);
 
   const sessionObj = sessions.find((s) => s.id === sessionId);
-  const domTranslatorRef = useRef<ChromeStyleDOMTranslator | null>(null);
 
   // Sync initial exited state
   useEffect(() => {
@@ -143,17 +139,6 @@ export default function TermView({ sessionId, active }: Props) {
       setExitCode(sessionObj.exitCode ?? 0);
     }
   }, [sessionObj?.status, sessionObj?.exitCode]);
-
-  // Live Chrome-style in-DOM terminal text node translation
-  useEffect(() => {
-    if (domTranslatorRef.current) {
-      if (isTranslatingScreen && active) {
-        domTranslatorRef.current.enable();
-      } else {
-        domTranslatorRef.current.disable();
-      }
-    }
-  }, [isTranslatingScreen, active]);
 
   // Update theme dynamically
   useEffect(() => {
@@ -218,12 +203,6 @@ export default function TermView({ sessionId, active }: Props) {
 
     term.open(host);
     term.onData((data) => deckSocket.send({ type: 'input', sessionId, data }));
-
-    const domTranslator = new ChromeStyleDOMTranslator(term, host, translateText);
-    domTranslatorRef.current = domTranslator;
-    if (useDeck.getState().isTranslatingScreen) {
-      domTranslator.enable();
-    }
 
     const fitNow = () => {
       if (host.clientWidth > 0 && host.clientHeight > 0) {
@@ -746,21 +725,6 @@ export default function TermView({ sessionId, active }: Props) {
 
   return (
     <div className="term-host absolute inset-0 h-full w-full" ref={hostRef}>
-      {/* Chrome-style DOM Localization Status Pill */}
-      {isTranslatingScreen && active && (
-        <div className="absolute top-2 right-3 z-30 flex items-center gap-1.5 rounded-full border border-accent/40 bg-panel2/90 px-3 py-1 text-xs shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-1">
-          <span className="inline-block h-2 w-2 rounded-full bg-accent animate-pulse" />
-          <span className="font-bold text-accent text-[11px]">🌐 谷歌式原生汉化</span>
-          <button
-            onClick={() => toggleScreenTranslation(false)}
-            className="rounded-full p-0.5 text-muted hover:text-red-400 active:scale-95 ml-1"
-            title="还原为原生英文"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
       {/* Exited Notification Banner */}
       {isExited && (
         <div className="exit-banner absolute top-2 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-panel/90 px-3.5 py-1.5 text-xs shadow-xl backdrop-blur-md">
