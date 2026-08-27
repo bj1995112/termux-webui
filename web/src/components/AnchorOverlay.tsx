@@ -65,25 +65,29 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }
         // Solid background mask to completely conceal underlying English characters
         const minMaskWidth = (anchor.endCol - anchor.startCol) * cellWidth;
 
-        // Direct ANSI & Terminal State Check for Active Selected Option
+        // Accurate Detection for Menu Items:
+        // Ignore box-drawing border title lines (e.g. │ >_ OpenAI Codex │)
+        const isBoxBorder = anchor.originalText.includes('│') || anchor.originalText.includes('─');
         let isAnsiSelected = false;
-        const line = buf.getLine(anchor.bufferRow);
-        if (line) {
-          // Check if any character cell in this anchor has inverse or highlight background
-          const checkLen = Math.min(line.length, anchor.endCol);
-          for (let col = anchor.startCol; col < checkLen; col += 1) {
-            const cell = line.getCell(col);
-            if (cell) {
-              if (cell.isInverse() || (cell.getBgColor() !== -1 && cell.getBgColor() !== 0)) {
-                isAnsiSelected = true;
-                break;
+
+        if (!isBoxBorder) {
+          const line = buf.getLine(anchor.bufferRow);
+          if (line) {
+            // Check if line starts with real interactive selection arrows: ❯, >, ●, *, ✔, [x]
+            const rawText = line.translateToString(true).trim();
+            if (/^[❯>●*✔✓]\s*|^\([x*]\)|^\s*>\s+\w+/i.test(rawText)) {
+              isAnsiSelected = true;
+            } else {
+              // Check cell-level ANSI inverse / highlight background
+              const checkLen = Math.min(line.length, anchor.endCol);
+              for (let col = anchor.startCol; col < checkLen; col += 1) {
+                const cell = line.getCell(col);
+                if (cell && (cell.isInverse() || (cell.getBgColor() !== -1 && cell.getBgColor() !== 0))) {
+                  isAnsiSelected = true;
+                  break;
+                }
               }
             }
-          }
-          // Also check text marker (❯, >, ●, *, ✔, [x])
-          const rawText = line.translateToString(true);
-          if (/[❯>●*✔✓]|\[x\]|\[\*\]/i.test(rawText)) {
-            isAnsiSelected = true;
           }
         }
 
