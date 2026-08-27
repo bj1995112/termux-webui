@@ -99,6 +99,43 @@ const LOCAL_TERMS: Record<string, string> = {
   'session': '会话',
 };
 
+/** Post-translation professional IT term fixer */
+const IT_TERM_REPLACEMENTS: [RegExp, string][] = [
+  [/模块快递/g, '模块'],
+  [/npm犯错!?/gi, 'npm 报错'],
+  [/政军ERR/g, 'npm ERR'],
+  [/恰当的更新/g, 'apt update (更新软件包列表)'],
+  [/恰当/g, 'apt'],
+  [/远端起源/g, '远程仓库 origin'],
+  [/恶魔进程/g, '守护进程 (daemon)'],
+  [/插座/g, '套接字 (Socket)'],
+  [/代币/g, '令牌 (Token)'],
+  [/港口/g, '端口 (Port)'],
+  [/存储库/g, '代码仓库 (Repository)'],
+  [/包裹/g, '软件包'],
+  [/根@本地主机/g, 'root@localhost'],
+];
+
+function postProcessChinese(text: string): string {
+  let res = text;
+  for (const [pattern, replacement] of IT_TERM_REPLACEMENTS) {
+    res = res.replace(pattern, replacement);
+  }
+  return res;
+}
+
+/** Terminal prompt stripper: extracts leading Shell prompt if any */
+function stripPrompt(line: string): { prompt: string; content: string } {
+  const promptMatch = line.match(/^(\s*(?:[\w.-]+@[\w.-]+:[^\n#$%>]*[#$%>]|bash-[0-9.]+[#$%>]|❯|➜|>|\$|#)\s*)/);
+  if (promptMatch) {
+    return {
+      prompt: promptMatch[1],
+      content: line.slice(promptMatch[1].length),
+    };
+  }
+  return { prompt: '', content: line };
+}
+
 /** In-memory cache for fast repeated query responses */
 const translationCache = new Map<string, { translated: string; fromLang: string; source: string; time: number }>();
 const MAX_CACHE_ENTRIES = 1000;
@@ -138,7 +175,7 @@ async function translateWithYoudaoMobile(text: string): Promise<{ translated: st
       },
       body: form,
     },
-    2500,
+    3000,
   );
 
   if (!res.ok) throw new Error(`Youdao Mobile returned HTTP ${res.status}`);
@@ -147,7 +184,7 @@ async function translateWithYoudaoMobile(text: string): Promise<{ translated: st
   if (match) {
     const items = [...match[1].matchAll(/<li>([\s\S]*?)<\/li>/g)].map((m) => m[1].trim());
     if (items.length > 0) {
-      return { translated: items.join('\n'), fromLang: 'auto' };
+      return { translated: postProcessChinese(items.join('\n')), fromLang: 'auto' };
     }
   }
   throw new Error('Youdao Mobile did not match result');
@@ -175,7 +212,7 @@ async function translateWithYoudaoSuggest(text: string): Promise<{ translated: s
   if (data.result?.code === 200 && data.data?.entries && data.data.entries.length > 0) {
     const explain = data.data.entries[0]?.explain?.trim();
     if (explain) {
-      return { translated: explain, fromLang: 'en' };
+      return { translated: postProcessChinese(explain), fromLang: 'en' };
     }
   }
   throw new Error('Youdao suggest did not find matching term');
@@ -203,7 +240,7 @@ async function translateWithGoogle(text: string, toLang = 'zh-CN'): Promise<{ tr
       .map((item) => (Array.isArray(item) && typeof item[0] === 'string' ? item[0] : ''))
       .join('');
     const fromLang = typeof data[2] === 'string' ? (data[2] as string) : 'en';
-    if (translated) return { translated, fromLang };
+    if (translated) return { translated: postProcessChinese(translated), fromLang };
   }
   throw new Error('Google translate returned unexpected structure');
 }
@@ -213,7 +250,6 @@ function normalizeLlmEndpoint(rawUrl: string): string {
   let url = rawUrl.trim().replace(/\/+$/, '');
   if (url.endsWith('/chat/completions')) return url;
   if (!url.endsWith('/v1')) {
-    // If user provided base like https://api.deepseek.com or https://api.openai.com
     url = `${url}/v1`;
   }
   return `${url}/chat/completions`;
@@ -236,11 +272,12 @@ async function translateWithCustomLLM(
   const systemPrompt =
     config.customPrompt ||
     `你是一个专业的 Linux 终端与程序代码翻译器。
-请将输入内容翻译为地道的${toLang}。
+请将输入内容翻译为地道、专业的${toLang}。
 【关键要求】：
-1. 严格保留代码块、Shell 命令（如 git, cd, npm 等）、参数选项（如 -rf, --help 等）、文件路径、变量名与特殊符号的原样，绝不随意翻译成中文。
+1. 严格保留所有 Shell 命令（如 git, cd, npm, apt, docker 等）、参数选项（如 -rf, --help 等）、代码变量名、文件路径（如 /etc/nginx/nginx.conf）与特殊符号的原样，绝不将其翻译为中文。
 2. 仅翻译自然语言解释、日志提示与错误描述。
-3. 直接输出翻译结果，不要带有任何多余的前缀、解释或 Markdown 格式包裹。`;
+3. 专业 IT 术语使用地道译名（例如 daemon 译为守护进程，socket 译为套接字，repository 译为代码仓库）。
+4. 直接输出翻译结果，不要带有任何多余的前缀、说明或 Markdown 代码块包裹。`;
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -315,14 +352,18 @@ export async function translateText(
     };
   }
 
+  // Separate prompt prefix to avoid weird prompt translation (e.g. root@localhost:~#)
+  const { prompt, content } = stripPrompt(clean);
+  const targetToTranslate = content.trim() ? content.trim() : clean;
+
   // 1. Cache lookup (0ms)
-  const cacheKey = getCacheKey(clean, toLang, config);
+  const cacheKey = getCacheKey(targetToTranslate, toLang, config);
   const cached = translationCache.get(cacheKey);
   if (cached && Date.now() - cached.time < 3600000 * 24) {
     return {
       ok: true,
       original: clean,
-      translated: cached.translated,
+      translated: prompt + cached.translated,
       fromLang: cached.fromLang,
       toLang,
       sourceUsed: `${cached.source} (cache)`,
@@ -333,12 +374,12 @@ export async function translateText(
   // 2. Custom LLM path (if user explicitly selected custom_llm)
   if (config?.provider === 'custom_llm') {
     try {
-      const res = await translateWithCustomLLM(clean, config, toLang);
+      const res = await translateWithCustomLLM(targetToTranslate, config, toLang);
       saveCache(cacheKey, res.translated, res.fromLang, 'custom_llm');
       return {
         ok: true,
         original: clean,
-        translated: res.translated,
+        translated: prompt + res.translated,
         fromLang: res.fromLang,
         toLang,
         sourceUsed: `Custom LLM (${config.customModel || 'default'})`,
@@ -358,13 +399,13 @@ export async function translateText(
   }
 
   // 3. Fast Local Linux Dictionary Check (Instant 0ms match)
-  const localMatch = translateWithLocalDict(clean);
+  const localMatch = translateWithLocalDict(targetToTranslate);
   if (localMatch) {
     saveCache(cacheKey, localMatch, 'en', 'Local Linux Terms');
     return {
       ok: true,
       original: clean,
-      translated: localMatch,
+      translated: prompt + localMatch,
       fromLang: 'en',
       toLang,
       sourceUsed: 'Local Linux Dictionary',
@@ -373,12 +414,12 @@ export async function translateText(
 
   // 4. Youdao Mobile Sentence / Term API (100% domestic reachable)
   try {
-    const yd = await translateWithYoudaoMobile(clean);
+    const yd = await translateWithYoudaoMobile(targetToTranslate);
     saveCache(cacheKey, yd.translated, yd.fromLang, 'Youdao Engine');
     return {
       ok: true,
       original: clean,
-      translated: yd.translated,
+      translated: prompt + yd.translated,
       fromLang: yd.fromLang,
       toLang,
       sourceUsed: 'Youdao Engine',
@@ -389,12 +430,12 @@ export async function translateText(
 
   // 5. Youdao Dictionary Suggest (for words & short phrases)
   try {
-    const ys = await translateWithYoudaoSuggest(clean);
+    const ys = await translateWithYoudaoSuggest(targetToTranslate);
     saveCache(cacheKey, ys.translated, ys.fromLang, 'Youdao Dictionary');
     return {
       ok: true,
       original: clean,
-      translated: ys.translated,
+      translated: prompt + ys.translated,
       fromLang: ys.fromLang,
       toLang,
       sourceUsed: 'Youdao Dictionary',
@@ -405,12 +446,12 @@ export async function translateText(
 
   // 6. Google Translate (if accessible)
   try {
-    const gg = await translateWithGoogle(clean, toLang);
+    const gg = await translateWithGoogle(targetToTranslate, toLang);
     saveCache(cacheKey, gg.translated, gg.fromLang, 'Google Translate');
     return {
       ok: true,
       original: clean,
-      translated: gg.translated,
+      translated: prompt + gg.translated,
       fromLang: gg.fromLang,
       toLang,
       sourceUsed: 'Google Translate',
