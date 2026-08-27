@@ -7,7 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
 import { THEMES } from '../theme.js';
-import { TerminalLocalizer } from '../lib/termLocalizer.js';
+import GlyphMirrorOverlay from '../components/GlyphMirrorOverlay.js';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
@@ -134,7 +134,6 @@ export default function TermView({ sessionId, active }: Props) {
   const sessions = useDeck((s) => s.sessions);
 
   const sessionObj = sessions.find((s) => s.id === sessionId);
-  const localizerRef = useRef<TerminalLocalizer | null>(null);
 
   // Sync initial exited state
   useEffect(() => {
@@ -143,17 +142,6 @@ export default function TermView({ sessionId, active }: Props) {
       setExitCode(sessionObj.exitCode ?? 0);
     }
   }, [sessionObj?.status, sessionObj?.exitCode]);
-
-  // Live in-DOM Terminal Localization (Google Webpage Style)
-  useEffect(() => {
-    if (localizerRef.current) {
-      if (isTranslatingScreen && active) {
-        localizerRef.current.enable();
-      } else {
-        localizerRef.current.disable();
-      }
-    }
-  }, [isTranslatingScreen, active]);
 
   // Update theme dynamically
   useEffect(() => {
@@ -218,12 +206,6 @@ export default function TermView({ sessionId, active }: Props) {
 
     term.open(host);
     term.onData((data) => deckSocket.send({ type: 'input', sessionId, data }));
-
-    const localizer = new TerminalLocalizer(term, host, translateText);
-    localizerRef.current = localizer;
-    if (useDeck.getState().isTranslatingScreen) {
-      localizer.enable();
-    }
 
     const fitNow = () => {
       if (host.clientWidth > 0 && host.clientHeight > 0) {
@@ -746,19 +728,12 @@ export default function TermView({ sessionId, active }: Props) {
 
   return (
     <div className="term-host absolute inset-0 h-full w-full" ref={hostRef}>
-      {/* Native In-DOM Translation Status Pill */}
+      {/* 1:1 In-Place Incremental Glyph Mirror Layer (100% Touch & Typing Pass-through) */}
       {isTranslatingScreen && active && (
-        <div className="absolute top-2 right-3 z-30 flex items-center gap-1.5 rounded-full border border-accent/40 bg-panel2/90 px-3 py-1 text-xs shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-1">
-          <span className="inline-block h-2 w-2 rounded-full bg-accent animate-pulse" />
-          <span className="font-bold text-accent text-[11px]">🌐 谷歌式原生汉化已开启</span>
-          <button
-            onClick={() => toggleScreenTranslation(false)}
-            className="rounded-full p-0.5 text-muted hover:text-red-400 active:scale-95 ml-1"
-            title="还原为原生英文"
-          >
-            ✕
-          </button>
-        </div>
+        <GlyphMirrorOverlay
+          term={termRef.current}
+          onClose={() => toggleScreenTranslation(false)}
+        />
       )}
 
       {/* Exited Notification Banner */}
