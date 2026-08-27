@@ -7,9 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
 import { THEMES } from '../theme.js';
-import { TerminalTranslator } from '../lib/terminalTranslator.js';
-import { CHINESE_SLASH_CMD_MAP, DETAILED_COMMAND_HELP_MAP } from '@termux-webui/shared';
-import { ActiveCommandPreview } from '../components/ActiveCommandPreview.js';
+import { CHINESE_SLASH_CMD_MAP } from '@termux-webui/shared';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
@@ -121,16 +119,7 @@ export default function TermView({ sessionId, active }: Props) {
     loading: boolean;
   } | null>(null);
 
-  const [activeHelp, setActiveHelp] = useState<(typeof DETAILED_COMMAND_HELP_MAP)[string] | null>(null);
-
   const translateText = useDeck((s) => s.translateText);
-  const showTranslation = useDeck((s) => s.showTranslation);
-  const translatorRef = useRef<TerminalTranslator | null>(null);
-
-  useEffect(() => {
-    translatorRef.current?.setEnabled(showTranslation);
-  }, [showTranslation]);
-
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
   const currentTheme = useDeck((s) => s.currentTheme);
@@ -213,9 +202,6 @@ export default function TermView({ sessionId, active }: Props) {
     }
 
     term.open(host);
-    const translator = new TerminalTranslator(term, translateText);
-    translator.setEnabled(useDeck.getState().showTranslation);
-    translatorRef.current = translator;
 
     // Mobile Input Buffer for Chinese Slash Commands Mapping
     let inputLineBuf = '';
@@ -240,51 +226,6 @@ export default function TermView({ sessionId, active }: Props) {
         inputLineBuf += data;
       }
       deckSocket.send({ type: 'input', sessionId, data });
-    });
-
-    term.onCursorMove(() => {
-      try {
-        const buffer = term.buffer.active;
-        const currentY = buffer.cursorY + buffer.baseY;
-
-        // Scan current line and adjacent lines for active pointer (→, >, ❯, ●, *)
-        let targetText = '';
-        for (let dy = -1; dy <= 1; dy += 1) {
-          const l = buffer.getLine(currentY + dy);
-          if (l) {
-            const raw = l.translateToString(true).trim();
-            if (/^[>→❯●*]/.test(raw) || raw.includes('→') || raw.includes('>')) {
-              targetText = raw;
-              break;
-            }
-          }
-        }
-
-        if (!targetText) {
-          const l = buffer.getLine(currentY);
-          if (l) targetText = l.translateToString(true).trim();
-        }
-
-        if (targetText) {
-          // Normalize clean token
-          const cleanToken = targetText.replace(/^[>→❯●*\s]+/, '').split(/\s+/)[0].toLowerCase();
-          const found =
-            DETAILED_COMMAND_HELP_MAP[cleanToken] ||
-            DETAILED_COMMAND_HELP_MAP[`/${cleanToken}`] ||
-            Object.values(DETAILED_COMMAND_HELP_MAP).find(
-              (h) => targetText.includes(h.enCmd) || targetText.includes(h.title),
-            );
-
-          if (found) {
-            setActiveHelp(found);
-            return;
-          }
-        }
-
-        setActiveHelp(null);
-      } catch {
-        /* ignore */
-      }
     });
 
     const fitNow = () => {
@@ -341,7 +282,7 @@ export default function TermView({ sessionId, active }: Props) {
           parked.push(msg.data);
           return;
         }
-        translator.ingest(msg.data);
+        term.write(msg.data);
         if (followRefs.get(sessionId)?.current) term.scrollToBottom();
       }
       if (msg.type === 'exit' && msg.sessionId === sessionId) {
@@ -659,8 +600,6 @@ export default function TermView({ sessionId, active }: Props) {
 
     return () => {
       off();
-      translator.clear();
-      translatorRef.current = null;
       ro.disconnect();
       if (pressTimer) clearTimeout(pressTimer);
       if (zoomHideTimer) clearTimeout(zoomHideTimer);
@@ -938,15 +877,6 @@ export default function TermView({ sessionId, active }: Props) {
           <button onClick={doCancel} className="sel-bar-btn">取消</button>
         </div>
       )}
-
-      {/* Immersive Floating Active Command Preview Capsule */}
-      <ActiveCommandPreview
-        activeHelp={activeHelp}
-        onExecute={(enCmd) => {
-          deckSocket.send({ type: 'input', sessionId, data: enCmd + '\r' });
-          setActiveHelp(null);
-        }}
-      />
     </div>
   );
 }

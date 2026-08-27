@@ -95,21 +95,6 @@ export default function App() {
             <span className="hidden xs:inline">命令工坊</span>
           </button>
 
-          {/* Quick Translation Peek / Toggle Switch */}
-          {active && (
-            <button
-              onClick={() => toggleTranslation()}
-              className={`flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-semibold shadow-sm active:scale-95 transition-all ${
-                showTranslation
-                  ? 'border-accent/40 bg-accent/15 text-accent'
-                  : 'border-border bg-panel2 text-muted hover:text-text'
-              }`}
-              title="点击全局切换显示中文/英文原文"
-            >
-              <span>{showTranslation ? '🌐 译文' : '👁️ 原文'}</span>
-            </button>
-          )}
-
           <button
             onClick={() => setShowNew(true)}
             className="flex items-center gap-1 rounded-xl bg-accent px-3 py-1 text-xs font-semibold text-white shadow-md active:bg-accent-hover active:scale-95 transition-all"
