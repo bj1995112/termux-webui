@@ -4,11 +4,36 @@ import { DEV_TOOL_EXACT_DICT, DEV_TOOL_TEMPLATES } from '@termux-webui/shared';
 export type TranslateFunction = (text: string) => Promise<string>;
 
 /**
- * Single-Pass Tokenized Terminal Stream Translator
- * 1. Single-Pass Execution: Uses word-level tokenizer to prevent cascading double-translation (e.g. "设置设置").
- * 2. Strict Word-Level Isolation: Each token is translated AT MOST ONCE.
- * 3. Accurate IT Developer Lexicon: "fork" -> "派生", "export" -> "导出", "clone" -> "克隆".
- * 4. URL & Path Immunity: 100% untouched links.
+ * Calculates physical terminal column/cell width of a string.
+ * ASCII = 1 cell, CJK Chinese/Japanese/Korean = 2 cells.
+ */
+function getCellWidth(str: string): number {
+  let width = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    const code = str.charCodeAt(i);
+    // CJK Unified Ideographs & Fullwidth forms
+    if (
+      (code >= 0x4e00 && code <= 0x9fff) ||
+      (code >= 0x3400 && code <= 0x4dbf) ||
+      (code >= 0xf900 && code <= 0xfaff) ||
+      (code >= 0xff01 && code <= 0xff60) ||
+      (code >= 0xffe0 && code <= 0xffe6)
+    ) {
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+  return width;
+}
+
+/**
+ * Industrial Stream Terminal Translator with Space-Padding Width Balancing
+ * 1. Space-Padding Width Balancer: Deducts added CJK width from trailing padding spaces.
+ *    Keeps every line's total physical cell width 100% identical to English original.
+ *    Completely prevents line wrapping and eliminates overlapping ghost rows!
+ * 2. Single-Pass Tokenizer: Zero cascading duplicate replacements.
+ * 3. URL & Path Immunity: 100% untouched links and file paths.
  */
 export class TerminalTranslator {
   private term: Terminal;
@@ -71,15 +96,14 @@ export class TerminalTranslator {
   }
 
   /**
-   * Single-Pass Tokenizer & Replacer:
-   * Splits into ANSI sequences, words, and delimiters. Translates each word AT MOST ONCE.
+   * Transforms stream chunk with Strict Column-Width Balance.
    */
   private transformStream(chunk: string): string {
     if (!/[A-Za-z]{2,}/.test(chunk)) {
       return chunk;
     }
 
-    // Split chunk into ANSI sequences vs visible text chunks
+    // Split chunk into ANSI escape sequences vs visible text
     // eslint-disable-next-line no-control-regex
     const parts = chunk.split(/(\x1b\[[0-9;]*[a-zA-Z]|\x1b\([a-zA-Z]|\x1b\][^\x07\x1b]*\x07)/g);
 
@@ -116,23 +140,42 @@ export class TerminalTranslator {
       }
 
       if (!templateMatched) {
-        // Step 3: Exact whole-line / whole-phrase match first
+        // Step 3: Exact whole-line match first
         const trimmedLower = shielded.trim().toLowerCase();
         const wholeExact = this.exactDictMap.get(trimmedLower);
         if (wholeExact) {
-          shielded = shielded.replace(shielded.trim(), wholeExact);
+          const origWidth = getCellWidth(shielded.trim());
+          const newWidth = getCellWidth(wholeExact);
+          const diff = newWidth - origWidth;
+
+          if (diff > 0 && shielded.includes(shielded.trim() + ' ')) {
+            // Trim padding spaces
+            const excessSpaces = ' '.repeat(diff);
+            shielded = shielded.replace(shielded.trim() + excessSpaces, wholeExact);
+          } else {
+            shielded = shielded.replace(shielded.trim(), wholeExact);
+          }
         } else {
-          // Step 4: Single-Pass Word Tokenization (Prevents double replacement like "设置设置")
-          // Matches slash commands, hyphenated words, or standard identifiers
+          // Step 4: Token Replacer with Padding Spaces Compensator
+          // Matches token and any immediately following spaces
           shielded = shielded.replace(
-            /(\/[a-zA-Z0-9_-]{2,20}|[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*)/g,
-            (token) => {
+            /(\/[a-zA-Z0-9_-]{2,20}|[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*)(\s*)/g,
+            (match, token: string, spaces: string) => {
               const lower = token.toLowerCase();
               const found = this.exactDictMap.get(lower);
               if (found) {
-                return found;
+                const origWidth = getCellWidth(token);
+                const newWidth = getCellWidth(found);
+                const diff = newWidth - origWidth;
+
+                if (diff > 0 && spaces.length >= diff) {
+                  // Deduct added width from trailing spaces to keep line length 100% unchanged!
+                  const remainingSpaces = spaces.slice(diff);
+                  return found + remainingSpaces;
+                }
+                return found + spaces;
               }
-              return token;
+              return match;
             },
           );
         }
