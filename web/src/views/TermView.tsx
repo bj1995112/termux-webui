@@ -8,6 +8,7 @@ import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
 import { THEMES } from '../theme.js';
 import { TerminalTranslator } from '../lib/terminalTranslator.js';
+import { CHINESE_SLASH_CMD_MAP } from '@termux-webui/shared';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
@@ -213,7 +214,28 @@ export default function TermView({ sessionId, active }: Props) {
     translator.setEnabled(useDeck.getState().showTranslation);
     translatorRef.current = translator;
 
+    // Mobile Input Buffer for Chinese Slash Commands Mapping
+    let inputLineBuf = '';
     term.onData((data) => {
+      // If user inputs Chinese slash command (e.g. /规划), auto map to English command (/plan)
+      if (data === '\r' || data === '\n') {
+        const trimmed = inputLineBuf.trim();
+        for (const [zhCmd, enCmd] of Object.entries(CHINESE_SLASH_CMD_MAP)) {
+          if (trimmed === zhCmd || trimmed.startsWith(zhCmd + ' ')) {
+            const mapped = trimmed.replace(zhCmd, enCmd);
+            // Erase input buffer in terminal and send mapped English command
+            const backspaces = '\b \b'.repeat(inputLineBuf.length);
+            deckSocket.send({ type: 'input', sessionId, data: backspaces + mapped + '\r' });
+            inputLineBuf = '';
+            return;
+          }
+        }
+        inputLineBuf = '';
+      } else if (data === '\x7f' || data === '\b') {
+        inputLineBuf = inputLineBuf.slice(0, -1);
+      } else if (!data.startsWith('\x1b')) {
+        inputLineBuf += data;
+      }
       deckSocket.send({ type: 'input', sessionId, data });
     });
 
