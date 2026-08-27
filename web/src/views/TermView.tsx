@@ -245,21 +245,43 @@ export default function TermView({ sessionId, active }: Props) {
     term.onCursorMove(() => {
       try {
         const buffer = term.buffer.active;
-        const line = buffer.getLine(buffer.cursorY + buffer.baseY);
-        if (line) {
-          const text = line.translateToString(true).trim();
-          let matched = false;
-          for (const [cmd, help] of Object.entries(DETAILED_COMMAND_HELP_MAP)) {
-            if (text.includes(cmd) || text.includes(help.title)) {
-              setActiveHelp(help);
-              matched = true;
+        const currentY = buffer.cursorY + buffer.baseY;
+
+        // Scan current line and adjacent lines for active pointer (→, >, ❯, ●, *)
+        let targetText = '';
+        for (let dy = -1; dy <= 1; dy += 1) {
+          const l = buffer.getLine(currentY + dy);
+          if (l) {
+            const raw = l.translateToString(true).trim();
+            if (/^[>→❯●*]/.test(raw) || raw.includes('→') || raw.includes('>')) {
+              targetText = raw;
               break;
             }
           }
-          if (!matched && !text.startsWith('/')) {
-            setActiveHelp(null);
+        }
+
+        if (!targetText) {
+          const l = buffer.getLine(currentY);
+          if (l) targetText = l.translateToString(true).trim();
+        }
+
+        if (targetText) {
+          // Normalize clean token
+          const cleanToken = targetText.replace(/^[>→❯●*\s]+/, '').split(/\s+/)[0].toLowerCase();
+          const found =
+            DETAILED_COMMAND_HELP_MAP[cleanToken] ||
+            DETAILED_COMMAND_HELP_MAP[`/${cleanToken}`] ||
+            Object.values(DETAILED_COMMAND_HELP_MAP).find(
+              (h) => targetText.includes(h.enCmd) || targetText.includes(h.title),
+            );
+
+          if (found) {
+            setActiveHelp(found);
+            return;
           }
         }
+
+        setActiveHelp(null);
       } catch {
         /* ignore */
       }

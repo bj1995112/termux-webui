@@ -1,131 +1,218 @@
 /**
- * Mobile-First Compact AI CLI Dictionary & Detailed Command Help Encyclopedia
- * 1. Compact Single-Line Dictionary (< 30 cells) strictly eliminates line-wrap cursor bugs.
- * 2. Detailed Command Help Map powers the immersive floating command preview capsule.
+ * Solution 1: Zero-Desync Architecture
+ * 1. Terminal List Items are isolated to guarantee 100% laser-precise ANSI cursor redrawing (0 ghost residues).
+ * 2. Immersive Bottom Help Capsule presents 100% comprehensive Chinese encyclopedia for all active items.
  */
 
 export const DETAILED_COMMAND_HELP_MAP: Record<
   string,
   { title: string; enCmd: string; desc: string; usage?: string; tip?: string }
 > = {
+  // === 1. Slash Commands ===
   '/plan': {
-    title: '切换规划模式',
+    title: '规划模式 (Plan Mode)',
     enCmd: '/plan',
-    desc: '进入只读架构分析与任务拆解模式。AI 将先输出详细的实施方案与步骤，绝不会擅自修改任何代码文件。',
-    usage: '/plan [可选任务目标]',
-    tip: '在执行大型功能重构或复杂 Bug 修复前，强烈建议先用 /plan 明确步骤！',
+    desc: '切换到只读规划与架构分析模式。AI 会先行梳理需求与实施步骤，绝不擅自修改任何代码文件。',
+    usage: '/plan [任务描述]',
+    tip: '大型功能开发前，强烈建议先用 /plan 明确步骤！',
   },
   '/goal': {
-    title: '设置任务目标',
+    title: '设定终极目标 (Goal)',
     enCmd: '/goal',
-    desc: '为长时间运行的自主 Agent 设定终极目标。AI 将自动闭环执行多步任务直到达成该目标。',
-    usage: '/goal <终极目标描述>',
-    tip: '目标描述越清晰具体（包含验收标准），Agent 的执行质量越高。',
+    desc: '为自主运行的长任务 Agent 设定终极验收目标，AI 将自动循环多步执行直至目标达成。',
+    usage: '/goal <目标描述>',
+    tip: '目标描述越精准具体，Agent 自主完成度越高。',
   },
   '/clear': {
-    title: '清空会话上下文',
+    title: '清空会话 (Clear)',
     enCmd: '/clear',
-    desc: '彻底清空当前终端屏幕与历史会话上下文，释放所有 Token 占用，开启全新独立的任务。',
+    desc: '清空当前终端屏幕与上下文对话历史，释放全部已占用的 Token，开启全新任务。',
     usage: '/clear',
-    tip: '当开始一个完全不相关的全新任务时，使用 /clear 可以显著提升响应速度并节省费用。',
+    tip: '切换全新任务时，使用 /clear 可以显著提升响应速度。',
   },
   '/compact': {
-    title: '智能压缩上下文',
+    title: '智能压缩上下文 (Compact)',
     enCmd: '/compact',
-    desc: '提取对话历史中的核心结论、代码决策与未完成事项，压缩冗余 Token，大幅释放上下文窗口。',
+    desc: '智能提取对话历史核心要点并压缩冗余 Token，大幅释放上下文窗口空间。',
     usage: '/compact',
-    tip: '当上下文占用超过 70% 提示警告时，使用 /compact 可以立竿见影释放空间！',
+    tip: '当上下文占用过高时，使用 /compact 可立竿见影释放空间！',
   },
   '/context': {
-    title: '上下文用量分析',
+    title: '上下文用量分析 (Context)',
     enCmd: '/context',
-    desc: '查看当前会话已使用的 Token 总量、各文件占比可视化图表与优化建议。',
+    desc: '查看当前会话已消耗的 Token 总量、上下文文件占用比例图表与优化建议。',
     usage: '/context',
-    tip: '帮助您快速发现是否有超大无用文件占用了过多上下文。',
+    tip: '帮助快速排查是否有超大无用文件占用了过多上下文。',
   },
   '/agents': {
-    title: '智能体协作管理',
+    title: '智能体协作管理 (Agents)',
     enCmd: '/agents',
-    desc: '查看当前所有活跃的 Agent 智能体列表，并支持在不同专精子 Agent 之间快速切换。',
+    desc: '查看当前所有活跃的 Agent 智能体列表，并可在不同专精子 Agent 之间快速切换。',
     usage: '/agents',
-    tip: '支持并行调度研究型、代码重构型等不同角色的子智能体协同作战。',
+    tip: '支持并行调度研究型、重构型等不同角色的智能体。',
   },
   '/model': {
-    title: '切换底层大模型',
+    title: '切换底层大模型 (Model)',
     enCmd: '/model',
-    desc: '实时切换或查看当前 AI CLI 正在使用的底层推理模型（例如 Claude 3.7 Sonnet、GPT-4o 等）。',
+    desc: '实时切换或查看当前 AI CLI 正在使用的底层推理模型（例如 Claude 3.7、GPT-4o 等）。',
     usage: '/model [模型名称]',
-    tip: '简单任务可使用轻量小模型提速，高难度架构任务切换至旗舰大模型。',
+    tip: '简单任务可使用轻量小模型提速，高难度任务切换至旗舰模型。',
   },
   '/diff': {
-    title: 'Git 变更代码对比',
+    title: 'Git 变更对比 (Diff)',
     enCmd: '/diff',
     desc: '查看工作区所有已修改文件、新增未跟踪文件的 Git 差异对比，直观展示代码增删行。',
     usage: '/diff',
-    tip: '在提交代码前使用 /diff 进行全量复核，确保没有意外多改文件。',
+    tip: '在提交代码前使用 /diff 进行全量复核。',
   },
   '/review': {
-    title: '全方位代码质量审查',
+    title: '代码质量审查 (Review)',
     enCmd: '/review',
     desc: '指示 AI 对当前分支的代码修改进行全方位的架构、安全性、异常边界与代码异味审查。',
     usage: '/review [分支名]',
     tip: '相当于自带一位资深架构师为您做代码审查 (Code Review)！',
   },
   '/undo': {
-    title: '撤销上一步修改',
+    title: '撤销上一步修改 (Undo)',
     enCmd: '/undo',
     desc: '一键撤销 AI 上一步对文件所做的所有代码改动，将工作区精准回滚至修改前状态。',
     usage: '/undo',
-    tip: '若 AI 改动的效果不符合预期，直接敲 /undo 即可无损回退。',
+    tip: '若 AI 改动不符合预期，直接敲 /undo 即可无损回退。',
   },
   '/commit': {
-    title: '智能生成 Git 提交',
+    title: '智能生成 Git 提交 (Commit)',
     enCmd: '/commit',
-    desc: 'AI 自动分析当前暂存的所有代码差异，自动生成符合 Conventional Commits 规范的精准提交信息并提交。',
+    desc: 'AI 自动分析当前暂存的代码差异，自动生成符合规范的精准提交信息并提交。',
     usage: '/commit',
-    tip: '告别手动写 Commit Message，地道标准又省心。',
+    tip: '告别手动写 Commit Message，标准又省心。',
   },
   '/doctor': {
-    title: '环境健康诊断',
+    title: '环境健康诊断 (Doctor)',
     enCmd: '/doctor',
     desc: '全面检查本地 Node.js、Python、Git、API Key 及网络连通性等开发环境依赖是否就绪。',
     usage: '/doctor',
-    tip: '当遇到工具运行异常或权限报错时，第一步先跑 /doctor 诊断。',
+    tip: '遇到工具运行异常或报错时，先跑 /doctor 诊断。',
   },
   '/mcp': {
-    title: 'MCP 插件服务管理',
+    title: 'MCP 插件服务管理 (MCP)',
     enCmd: '/mcp',
     desc: '配置、连接或管理基于 Model Context Protocol (MCP) 标准的外部工具服务与数据源插件。',
     usage: '/mcp [list|add|remove]',
-    tip: '扩展 AI 的能力边界，让 AI 直接操作数据库、GitHub 或浏览器！',
+    tip: '让 AI 直接操作数据库、GitHub 或浏览器！',
   },
   '/permissions': {
-    title: '安全执行权限管理',
+    title: '安全执行权限管理 (Permissions)',
     enCmd: '/permissions',
     desc: '查看或配置允许 AI 自动执行的 Shell 终端指令与文件修改安全白名单。',
     usage: '/permissions',
     tip: '开启自动授权可以减少频繁确认弹框，提升自动化开发效率。',
   },
   '/add': {
-    title: '添加文件到上下文',
+    title: '添加文件到上下文 (Add)',
     enCmd: '/add',
     desc: '将指定的单个文件、通配符或目录完整加载到 AI 对话上下文中供参考与修改。',
     usage: '/add <文件路径/通配符>',
     tip: '精准添加相关文件能让 AI 更快定位逻辑并减少 Token 浪费。',
   },
   '/drop': {
-    title: '从上下文中移除文件',
+    title: '从上下文中移除文件 (Drop)',
     enCmd: '/drop',
     desc: '从当前 AI 编码会话中移出指定文件，释放上下文空间。',
     usage: '/drop <文件路径>',
     tip: '完成某模块开发后，及时 /drop 掉已无关的文件。',
   },
   '/help': {
-    title: '查看帮助与命令列表',
+    title: '查看帮助与命令列表 (Help)',
     enCmd: '/help',
     desc: '列出当前开发工具支持的所有可用斜杠命令、键盘快捷键与使用说明。',
     usage: '/help',
     tip: '随时输入 /help 探索更多高级功能。',
+  },
+
+  // === 2. Inquirer Interactive Menu Items ===
+  'settings': {
+    title: '全局设置与首选项 (Settings)',
+    enCmd: 'settings',
+    desc: '配置当前 CLI 工具的全局行为模式、外观主题、流式输出、API Key 与默认上下文策略。',
+    tip: '支持自定义自动化确认阈值与终端按键映射。',
+  },
+  'models': {
+    title: '模型列表与切换 (Models)',
+    enCmd: 'models',
+    desc: '浏览与配置当前环境支持的所有大语言模型（包括 OpenAI、Anthropic、DeepSeek、本地 Ollama 等）。',
+    tip: '可在此配置各模型的 Temperature 温度与最大输出 Token 限制。',
+  },
+  'scoped-models': {
+    title: '作用域模型分配 (Scoped Models)',
+    enCmd: 'scoped-models',
+    desc: '为不同专精任务（如规划、快速问答、代码大重构、代码审查）分别指定专用的底层大模型。',
+    tip: '例如：规划用强推理大模型，日常简单问答用轻量高速模型，成本与速度兼得！',
+  },
+  'fork': {
+    title: '派生会话副本 (Fork Session)',
+    enCmd: 'fork',
+    desc: '将当前会话历史分叉出一个完全独立的副会话，用于探索不同的技术实现路线而不破坏主会话。',
+    tip: '想尝试某种高风险方案时，先 fork 一个独立分支测试。',
+  },
+  'clone': {
+    title: '克隆仓库与工程 (Clone)',
+    enCmd: 'clone',
+    desc: '从远程 Git 仓库（GitHub/GitLab/Gitee）拉取完整代码到本地当前工作区。',
+    tip: '支持通过 SSH 或 HTTPS 地址一键克隆。',
+  },
+  'tree': {
+    title: '工作区目录树 (Directory Tree)',
+    enCmd: 'tree',
+    desc: '以可视化树状图格式展示当前项目的所有文件与目录层级结构。',
+    tip: '帮助 AI 和您快速掌握项目的整体模块架构。',
+  },
+  'hotkeys': {
+    title: '键盘快捷键总览 (Hotkeys)',
+    enCmd: 'hotkeys',
+    desc: '查看当前终端控制台的所有全局快捷键绑定（如快速清屏、终止执行、模式切换等）。',
+    tip: '熟练掌握快捷键可以让移动端编码效率翻倍！',
+  },
+  'changelog': {
+    title: '版本更新日志 (Changelog)',
+    enCmd: 'changelog',
+    desc: '查看当前开发软件各版本的发布记录、重大新特性、性能改进与修复清单。',
+    tip: '及时了解最新上线的实用功能。',
+  },
+  'share': {
+    title: '在线分享会话 (Share)',
+    enCmd: 'share',
+    desc: '将当前会话的对话与代码成果生成一个只读的 Web 在线分享链接，方便团队协作与复盘。',
+    tip: '分享链接会默认抹去敏感 API Key 与私有凭据。',
+  },
+  'copy': {
+    title: '复制最新回复 (Copy)',
+    enCmd: 'copy',
+    desc: '一键将 AI 最新生成的一段回复、代码块或终端执行结果复制到手机系统剪贴板。',
+    tip: '无需在手机屏幕上手动长按选择，极度方便！',
+  },
+  'name': {
+    title: '重命名当前会话 (Name Session)',
+    enCmd: 'name',
+    desc: '为当前会话自定义一个清晰易懂的名称标签，方便在历史记录与标签页中快速检索。',
+    tip: '给每个模块开发任务起一个专门的名字。',
+  },
+  'session': {
+    title: '会话工作区管理 (Session)',
+    enCmd: 'session',
+    desc: '管理、查看或切换当前所有后台运行的 PTY 终端会话与历史对话归档。',
+    tip: '支持后台多任务并行运行，随时无缝接入。',
+  },
+  'export': {
+    title: '导出对话与文档 (Export)',
+    enCmd: 'export',
+    desc: '将当前会话的完整对话记录与代码修改导出为标准 Markdown、JSON 或 HTML 文档。',
+    tip: '便于将 AI 生成的技术方案一键归档到团队知识库。',
+  },
+  'import': {
+    title: '导入会话与词典 (Import)',
+    enCmd: 'import',
+    desc: '从本地文件导入历史会话快照、自定义提示词库或扩展词典配置。',
+    tip: '实现多设备间的配置与历史无缝迁移。',
   },
 };
 
@@ -191,102 +278,11 @@ export const CHINESE_SLASH_CMD_MAP: Record<string, string> = {
 };
 
 /**
- * Ultra-Compact Dictionary Strictly Under 30 Physical Cells
- * Ensures zero line-wrap on mobile portrait screens (360px~420px width).
+ * Standard Descriptive Dictionary for Prompts & Questions
+ * Applied exclusively to prompts and question dialogs, leaving interactive cursor lists pristine.
  */
 export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
-  // === 1. OpenAI Codex CLI (Compact Single-Line) ===
-  '/plan': '/规划 (plan) 规划模式',
-  '/goal': '/目标 (goal) 任务目标',
-  '/agents': '/智能体 (agents) 切换智能体',
-  '/side': '/副对话 (side) 临时分支',
-  '/copy': '/复制 (copy) 复制回复',
-  '/export': '/导出 (export) 导出文档',
-  '/raw': '/纯文本 (raw) 纯文本模式',
-  '/diff': '/对比 (diff) 代码对比',
-  '/skills': '/技能 (skills) 调度技能',
-  '/model': '/模型 (model) 切换模型',
-  '/help': '/帮助 (help) 命令列表',
-  '/clear': '/清空 (clear) 清空重置',
-  '/test': '/测试 (test) 运行测试',
-  '/status': '/状态 (status) 系统状态',
-  '/compact': '/压缩 (compact) 压缩空间',
-  '/config': '/配置 (config) 全局配置',
-  '/mcp': '/插件 (mcp) 插件服务',
-  '/permissions': '/权限 (permissions) 权限管理',
-  '/doctor': '/诊断 (doctor) 环境诊断',
-  '/reset': '/重置 (reset) 重置会话',
-  '/share': '/分享 (share) 分享链接',
-  '/undo': '/撤销 (undo) 撤销修改',
-  '/commit': '/提交 (commit) 智能提交',
-  '/init': '/初始化 (init) 规范配置',
-  '/exit': '/退出 (exit) 退出会话',
-  '/quit': '/退出 (quit) 退出程序',
-
-  // === 2. Anthropic Claude Code CLI (Compact) ===
-  '/context': '/上下文 (context) Token分析',
-  '/resume': '/恢复 (resume) 恢复会话',
-  '/fork': '/派生 (fork) 派生副本',
-  '/rewind': '/回滚 (rewind) 回退检查点',
-  '/checkpoint': '/快照 (checkpoint) 快照管理',
-  '/btw': '/追问 (btw) 快速提问',
-  '/cost': '/费用 (cost) 账单用量',
-  '/bug': '/反馈 (bug) 提交反馈',
-  '/login': '/登录 (login) 账号登录',
-  '/logout': '/登出 (logout) 退出登录',
-  '/pr': '/合并 (pr) 审查 PR',
-  '/review': '/审查 (review) 代码审查',
-  '/security': '/安全 (security) 安全扫描',
-  '/terminal': '/终端 (terminal) 终端切换',
-
-  // === 3. Aider AI Pair Programmer (Compact) ===
-  '/add': '/添加 (add) 加载文件',
-  '/drop': '/移除 (drop) 移除文件',
-  '/ls': '/清单 (ls) 文件清单',
-  '/map': '/拓扑 (map) 依赖拓扑',
-  '/code': '/代码 (code) 编写模式',
-  '/ask': '/提问 (ask) 只读答疑',
-  '/architect': '/架构 (architect) 架构模式',
-  '/chat-mode': '/模式 (chat-mode) 切换模式',
-  '/git': '/原生Git (git) Git 指令',
-  '/run': '/执行 (run) 执行命令',
-  '/tokens': '/统计 (tokens) Token统计',
-  '/web': '/抓取 (web) 抓取网页',
-  '/read-only': '/只读 (read-only) 只读文件',
-  '/voice': '/语音 (voice) 语音交互',
-  '/lint': '/检查 (lint) 规范检查',
-
-  // === 4. Cursor & OpenCode & Hermes (Compact) ===
-  '/edit': '/编辑 (edit) 外部编辑',
-  '/connect': '/连接 (connect) 模型连接',
-  '/debug': '/调试 (debug) 根因调试',
-  '/rename': '/重命名 (rename) 重命名会话',
-  '/summarize': '/摘要 (summarize) 提取摘要',
-  '/rules': '/准则 (rules) AI 准则',
-  '/shell': '/终端沙箱 (shell) 沙箱指令',
-  '/docs': '/文档 (docs) 检索文档',
-  '/composer': '/多文件 (composer) 协同编辑',
-  '/editor': '/编辑器 (editor) 系统编辑器',
-  '/session': '/会话 (session) 历史会话',
-  '/switch': '/切换 (switch) 快速切换',
-  '/attach': '/接入 (attach) 接入任务',
-  '/history': '/历史 (history) 历史执行',
-  '/prune': '/清理 (prune) 清理缓存',
-
-  // === 5. Common CLI Menu Terms (Strict Full-Word) ===
-  'scoped-models': '作用域模型 (scoped-models)',
-  'models': '模型列表',
-  'model': '模型',
-  'settings': '设置',
-  'export': '导出',
-  'import': '导入',
-  'fork': '派生 (fork)',
-  'clone': '克隆 (clone)',
-  'tree': '目录树 (tree)',
-  'hotkeys': '快捷键 (hotkeys)',
-  'changelog': '更新日志 (changelog)',
-
-  // === 6. Interactive Menus & CLI Questions ===
+  // === Prompts & CLI Questions ===
   '? Project name:': '? 项目名称：',
   '? Select a framework:': '? 选择框架：',
   '? Select a variant:': '? 选择语言变体：',
@@ -320,7 +316,7 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'press o to open in browser': '按 o 在浏览器中打开',
   'press c to clear console': '按 c 清空控制台',
 
-  // === 6. Git & Linux System ===
+  // === Git & System ===
   'On branch main': '位于分支 main',
   'On branch master': '位于分支 master',
   'Your branch is up to date with': '分支已与远程保持最新',
