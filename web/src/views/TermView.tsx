@@ -121,8 +121,8 @@ export default function TermView({ sessionId, active }: Props) {
   } | null>(null);
 
   const translateText = useDeck((s) => s.translateText);
+  const showTranslation = useDeck((s) => s.showTranslation);
   const [anchors, setAnchors] = useState<TranslationAnchor[]>([]);
-  const [showTranslation, setShowTranslation] = useState(true);
   const pipelineRef = useRef<TerminalStreamPipeline | null>(null);
 
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
@@ -745,24 +745,6 @@ export default function TermView({ sessionId, active }: Props) {
     <div className="term-host absolute inset-0 h-full w-full" ref={hostRef}>
       {/* Real-time Dual Pipeline Translation Anchor Overlay */}
       <AnchorOverlay term={termRef.current} anchors={anchors} visible={showTranslation} />
-
-      {/* Floating Quick Peek / Toggle Pill */}
-      {anchors.length > 0 && active && (
-        <button
-          onClick={() => setShowTranslation((v) => !v)}
-          className={`absolute top-2 right-3 z-40 flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs shadow-xl backdrop-blur-md transition-all active:scale-95 ${
-            showTranslation
-              ? 'border-accent/40 bg-panel2/90 text-accent ring-1 ring-accent/30'
-              : 'border-border/60 bg-panel/90 text-muted hover:text-text'
-          }`}
-          title="点击切换显示中文/英文原文"
-        >
-          <span className={`inline-block h-2 w-2 rounded-full ${showTranslation ? 'bg-accent animate-pulse' : 'bg-muted'}`} />
-          <span className="font-bold text-[11px]">
-            {showTranslation ? '🌐 中文 (点看原文)' : '👁️ 原文 (点看中文)'}
-          </span>
-        </button>
-      )}
 
       {/* Exited Notification Banner */}
       {isExited && (

@@ -20,6 +20,8 @@ export default function App() {
   const isAuthenticated = useDeck((s) => s.isAuthenticated);
   const keyboardVisible = useDeck((s) => s.keyboardVisible);
   const toggleKeyboard = useDeck((s) => s.toggleKeyboard);
+  const showTranslation = useDeck((s) => s.showTranslation);
+  const toggleTranslation = useDeck((s) => s.toggleTranslation);
   const [showNew, setShowNew] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
@@ -81,6 +83,20 @@ export default function App() {
 
         {/* Right Actions */}
         <div className="ml-auto flex items-center gap-1.5">
+          {/* Quick Translation Peek / Toggle Switch */}
+          {active && (
+            <button
+              onClick={() => toggleTranslation()}
+              className={`flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs font-semibold shadow-sm active:scale-95 transition-all ${
+                showTranslation
+                  ? 'border-accent/40 bg-accent/15 text-accent'
+                  : 'border-border bg-panel2 text-muted hover:text-text'
+              }`}
+              title="点击全局切换显示中文/英文原文"
+            >
+              <span>{showTranslation ? '🌐 译文' : '👁️ 原文'}</span>
+            </button>
+          )}
 
           <button
             onClick={() => setShowNew(true)}

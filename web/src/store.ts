@@ -35,10 +35,12 @@ interface DeckState {
   setFontSize: (size: number) => void;
   resetFontSize: () => void;
 
-  // Translation System (Word Selection Translation)
+  // Translation System (Live Stream & Word Selection)
   translationConfig: TranslationConfig;
   setTranslationConfig: (cfg: Partial<TranslationConfig>) => void;
   translateText: (text: string, toLang?: string) => Promise<string>;
+  showTranslation: boolean;
+  toggleTranslation: (val?: boolean) => void;
 
   // Toast
   toast: { message: string; type: 'info' | 'success' | 'error' } | null;
@@ -130,6 +132,12 @@ export const useDeck = create<DeckState>((set, get) => {
     })(),
     toast: null,
     previewDetail: null,
+    showTranslation: boolPref('twui.showTrans', true),
+    toggleTranslation: (val?: boolean) => {
+      const next = typeof val === 'boolean' ? val : !get().showTranslation;
+      localStorage.setItem('twui.showTrans', next ? '1' : '0');
+      set({ showTranslation: next });
+    },
 
     setTranslationConfig: (cfg: Partial<TranslationConfig>) => {
       const current = get().translationConfig;

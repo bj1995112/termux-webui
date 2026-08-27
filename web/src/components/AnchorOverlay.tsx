@@ -5,7 +5,7 @@ import type { TranslationAnchor } from '../lib/streamPipeline.js';
 interface Props {
   term: Terminal | null;
   anchors: TranslationAnchor[];
-  visible?: boolean; // Toggle overlay visibility to peek raw English instantly
+  visible?: boolean;
 }
 
 export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }) => {
@@ -66,10 +66,10 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }
         // Solid background mask to completely conceal underlying English characters
         const minMaskWidth = (anchor.endCol - anchor.startCol) * cellWidth;
 
-        // Detect if this anchor corresponds to the actively selected / focused option
+        // Detect active selected option: cursor is on this row OR text has selection marker
         const isCursorRow = anchor.bufferRow === cursorAbsRow;
-        const isSelectionMarker = /^[❯>●*✔✓]/.test(anchor.originalText) || anchor.originalText.includes('❯');
-        const isActiveSelected = isCursorRow || isSelectionMarker;
+        const hasSelectionMarker = /^[❯>●*✔✓]/.test(anchor.originalText) || anchor.originalText.includes('❯') || anchor.originalText.includes('›');
+        const isActiveSelected = isCursorRow || hasSelectionMarker;
 
         return (
           <div
@@ -81,21 +81,21 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }
               height: `${height}px`,
               lineHeight: `${height}px`,
               minWidth: `${minMaskWidth}px`,
-              padding: '0 4px',
+              padding: '0 6px',
               whiteSpace: 'pre',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               fontFamily: term.options.fontFamily || 'monospace',
               fontSize: `${term.options.fontSize}px`,
-              // Active selected option gets glowing blue highlight & crisp white text
+              // Distinct visual styles for active selected item vs regular items
               color: isActiveSelected ? '#ffffff' : 'var(--text, #c0caf5)',
-              fontWeight: isActiveSelected ? 600 : 400,
-              background: isActiveSelected ? 'rgba(59, 130, 246, 0.28)' : themeBg,
-              borderLeft: isActiveSelected ? '3px solid #60a5fa' : 'none',
-              boxShadow: isActiveSelected ? 'inset 0 0 12px rgba(59, 130, 246, 0.2)' : 'none',
-              borderRadius: isActiveSelected ? '2px' : '0px',
+              fontWeight: isActiveSelected ? 700 : 400,
+              background: isActiveSelected ? 'rgba(59, 130, 246, 0.35)' : themeBg,
+              borderLeft: isActiveSelected ? '4px solid #3b82f6' : 'none',
+              boxShadow: isActiveSelected ? '0 0 12px rgba(59, 130, 246, 0.35)' : 'none',
+              borderRadius: isActiveSelected ? '3px' : '0px',
               zIndex: isActiveSelected ? 40 : 35,
-              transition: 'background 0.05s ease, border 0.05s ease',
+              transition: 'background 0.08s ease, border-color 0.08s ease, color 0.08s ease',
             }}
           >
             {anchor.translatedText}

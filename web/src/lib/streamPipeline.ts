@@ -91,13 +91,15 @@ export class TerminalStreamPipeline {
     }> = [];
 
     for (let row = start; row < end; row += 1) {
-      // Never place visual overlay directly on top of active typing cursor row
-      if (row === cursorAbsRow) continue;
-
       const line = buf.getLine(row);
       if (!line) continue;
       const rawStr = line.translateToString(true);
       const trimmed = rawStr.trim();
+
+      // Only skip if user is actively typing in a standard bash prompt line (e.g. root@localhost:~# ...)
+      if (row === cursorAbsRow && this.isShellPromptLine(trimmed)) {
+        continue;
+      }
 
       // Check if line is eligible for translation
       if (!this.isValidTranslatableLine(trimmed)) continue;
@@ -169,12 +171,18 @@ export class TerminalStreamPipeline {
     );
   }
 
+  private isShellPromptLine(text: string): boolean {
+    if (/^[\w.-]+@[\w.-]+[:#$~>\s]/.test(text)) return true;
+    if (/^[#$%>]\s/.test(text)) return true;
+    return false;
+  }
+
   private isValidTranslatableLine(text: string): boolean {
     if (!text || text.length < 2 || text.length > 500) return false;
 
     // Skip pure shell prompts if they don't contain substantive text
     if (/^[\w.-]+@[\w.-]+[:#$~>\s]*$/.test(text)) return false;
-    if (/^[#$%>›❯]\s*$/.test(text)) return false;
+    if (/^[#$%>]\s*$/.test(text)) return false;
 
     // Skip pure symbol decoration lines (box drawings, delimiters)
     if (/^[╭╮╰╯│─┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬\s\-_+=*#|/\\]+$/.test(text)) {
