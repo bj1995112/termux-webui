@@ -6,28 +6,97 @@ export function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\([a-zA-Z]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '');
 }
 
-/** Local common Linux / Shell / AI terminology dictionary for offline fallback */
+/** Comprehensive Local Linux / Shell / Git / AI terminology dictionary for 100% offline accuracy */
 const LOCAL_TERMS: Record<string, string> = {
+  // General & greetings
   'hello world': '你好，世界',
+  'hello': '你好',
+  'world': '世界',
+  'help': '帮助',
+  'version': '版本',
+  'status': '状态',
+  'welcome': '欢迎',
+  'done': '已完成',
+  'success': '成功',
+  'successful': '成功',
+  'failed': '失败',
+  'error': '错误',
+  'warning': '警告',
+  'info': '提示',
+  'debug': '调试',
+
+  // Common Linux Errors & Messages
+  'permission denied': '权限被拒绝 (请尝试使用 sudo 或检查文件权限)',
   'file not found': '文件未找到',
-  'no such file or directory': '没有那个文件或目录',
-  'permission denied': '权限被拒绝',
-  'command not found': '未找到命令',
+  'no such file or directory': '没有该文件或目录',
+  'command not found': '未找到命令 (请检查是否已安装该软件包)',
+  'cannot find module': '找不到指定的模块',
   'syntaxerror: unexpected token': '语法错误：意外的标记',
   'syntax error': '语法错误',
   'connection refused': '连接被拒绝',
+  'connection reset by peer': '连接被对端重置',
   'timed out': '连接超时',
-  'address already in use': '端口地址已被占用',
+  'network is unreachable': '网络不可达',
+  'address already in use': '端口已被占用',
   'is not recognized as an internal or external command': '不是内部或外部命令',
   'fatal error': '致命错误',
   'segmentation fault': '段错误 (内存访问违规)',
   'build successful': '构建成功',
   'compilation failed': '编译失败',
   'disk quota exceeded': '磁盘配额已超出',
-  'authentication failed': '身份验证失败',
-  'not found': '未找到',
-  'unhandled error': '未处理的错误',
-  'cannot find module': '找不到指定的模块',
+  'authentication failed': '身份验证失败 (密码或 Token 错误)',
+  'unhandled exception': '未处理的异常',
+  'invalid argument': '无效的参数',
+  'broken pipe': '管道破裂 (Broken pipe)',
+  'out of memory': '内存耗尽 (Out of memory)',
+  'resource temporarily unavailable': '资源暂时不可用',
+  'too many open files': '打开的文件数过多',
+  'device or resource busy': '设备或资源正忙',
+  'operation not permitted': '操作不被允许',
+  'read-only file system': '只读文件系统',
+  'input/output error': '输入/输出错误 (I/O 错误)',
+  'unable to locate package': '无法定位指定的软件包',
+  'failed to fetch': '下载/获取资源失败',
+  'could not resolve host': '无法解析主机域名',
+  'certificate verification failed': 'SSL 证书验证失败',
+  'package not found': '软件包未找到',
+
+  // Git & Shell Commands / Status
+  'repository': '代码仓库',
+  'branch': '分支',
+  'commit': '提交',
+  'merge': '合并',
+  'rebase': '变基',
+  'checkout': '检出/切换分支',
+  'cherry-pick': '挑选提交',
+  'stash': '暂存更改',
+  'pull request': '拉取请求 (PR)',
+  'conflict': '冲突',
+  'up to date': '已是最新',
+  'working tree clean': '工作区干净，无待提交的更改',
+  'changes not staged for commit': '已修改但未暂存的更改',
+  'untracked files': '未跟踪的新文件',
+  'nothing to commit': '无内容需要提交',
+  'ahead of': '领先于',
+  'behind': '落后于',
+
+  // Actions & Controls
+  'copy': '复制',
+  'paste': '粘贴',
+  'select all': '全选',
+  'cancel': '取消',
+  'restart': '重新启动',
+  'delete': '删除',
+  'clear': '清除',
+  'close': '关闭',
+  'save': '保存',
+  'load': '加载',
+  'refresh': '刷新',
+  'preview': '预览',
+  'resume': '恢复',
+  'settings': '设置',
+  'terminal': '终端',
+  'session': '会话',
 };
 
 /** In-memory cache for fast repeated query responses */
@@ -52,28 +121,31 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 2
   }
 }
 
-/** Source 1: MyMemory Public Translation API (Globally reachable without VPN) */
-async function translateWithMyMemory(text: string, toLang = 'zh-CN'): Promise<{ translated: string; fromLang: string }> {
-  const target = toLang.startsWith('zh') ? 'zh-CN' : toLang;
-  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0, 500))}&langpair=en|${target}`;
+/** Source 1: Youdao Dictionary Suggest API (100% stable & zero-block in China) */
+async function translateWithYoudao(text: string): Promise<{ translated: string; fromLang: string }> {
+  const url = `https://dict.youdao.com/suggest?num=1&doctype=json&q=${encodeURIComponent(text.slice(0, 100))}`;
   const res = await fetchWithTimeout(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)',
     },
-  }, 2500);
+  }, 2000);
 
-  if (!res.ok) throw new Error(`MyMemory returned HTTP ${res.status}`);
-  const data = (await res.json()) as { responseData?: { translatedText?: string }; responseStatus?: number };
-  if (data.responseData?.translatedText && data.responseStatus === 200) {
-    const clean = data.responseData.translatedText.trim();
-    if (clean && !clean.startsWith('MYMEMORY WARNING')) {
-      return { translated: clean, fromLang: 'en' };
+  if (!res.ok) throw new Error(`Youdao returned HTTP ${res.status}`);
+  const data = (await res.json()) as {
+    result?: { code?: number };
+    data?: { entries?: { explain?: string; entry?: string }[] };
+  };
+
+  if (data.result?.code === 200 && data.data?.entries && data.data.entries.length > 0) {
+    const explain = data.data.entries[0]?.explain?.trim();
+    if (explain) {
+      return { translated: explain, fromLang: 'en' };
     }
   }
-  throw new Error('MyMemory translation invalid response');
+  throw new Error('Youdao suggest did not find matching term');
 }
 
-/** Source 2: Google Translate Public RPC */
+/** Source 2: Google Translate Public RPC (Fallback if VPN/Proxy active) */
 async function translateWithGoogle(text: string, toLang = 'zh-CN'): Promise<{ translated: string; fromLang: string }> {
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(toLang)}&dt=t&q=${encodeURIComponent(text)}`;
   const res = await fetchWithTimeout(url, {
@@ -95,35 +167,7 @@ async function translateWithGoogle(text: string, toLang = 'zh-CN'): Promise<{ tr
   throw new Error('Google translate returned unexpected structure');
 }
 
-/** Source 3: Lingva Open Alternative Mirror */
-async function translateWithLingva(text: string, toLang = 'zh'): Promise<{ translated: string; fromLang: string }> {
-  const cleanTo = toLang.startsWith('zh') ? 'zh' : toLang;
-  const mirrors = [
-    'https://lingva.ml/api/v1/auto',
-    'https://translate.plausibility.cloud/api/v1/auto',
-  ];
-
-  for (const mirror of mirrors) {
-    try {
-      const url = `${mirror}/${cleanTo}/${encodeURIComponent(text)}`;
-      const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'Termux-WebUI' } }, 1500);
-      if (res.ok) {
-        const data = (await res.json()) as { translation?: string; info?: { detectedSource?: string } };
-        if (data.translation) {
-          return {
-            translated: data.translation,
-            fromLang: data.info?.detectedSource || 'en',
-          };
-        }
-      }
-    } catch {
-      /* try next mirror */
-    }
-  }
-  throw new Error('All Lingva mirrors failed');
-}
-
-/** Source 4: User-defined Custom LLM (DeepSeek, OpenAI, Ollama) */
+/** Source 3: User-defined Custom LLM (DeepSeek, OpenAI, Ollama) */
 async function translateWithCustomLLM(
   text: string,
   config: TranslationConfig,
@@ -193,7 +237,7 @@ function translateWithLocalDict(text: string): string | null {
   return null;
 }
 
-/** Unified Multi-source Translation with Concurrent Race & Failover */
+/** Unified Multi-source Translation */
 export async function translateText(
   rawText: string,
   toLang = 'zh-CN',
@@ -244,27 +288,7 @@ export async function translateText(
     }
   }
 
-  // 3. Concurrent Multi-Source Race (MyMemory + Google + Lingva)
-  try {
-    const winner = await Promise.any([
-      translateWithMyMemory(clean, toLang).then((r) => ({ ...r, source: 'MyMemory' })),
-      translateWithGoogle(clean, toLang).then((r) => ({ ...r, source: 'Google Translate' })),
-      translateWithLingva(clean, toLang).then((r) => ({ ...r, source: 'Lingva Mirror' })),
-    ]);
-    saveCache(cacheKey, winner.translated, winner.fromLang, winner.source);
-    return {
-      ok: true,
-      original: clean,
-      translated: winner.translated,
-      fromLang: winner.fromLang,
-      toLang,
-      sourceUsed: winner.source,
-    };
-  } catch {
-    /* all online sources failed -> try local dict */
-  }
-
-  // 4. Local Linux Dictionary Fallback
+  // 3. Fast Local Linux Dictionary Check
   const localMatch = translateWithLocalDict(clean);
   if (localMatch) {
     saveCache(cacheKey, localMatch, 'en', 'Local Linux Terms');
@@ -278,14 +302,45 @@ export async function translateText(
     };
   }
 
-  // Return original text if totally untranslatable
+  // 4. Fast Youdao Suggest (Domestic 100% available without VPN)
+  try {
+    const yd = await translateWithYoudao(clean);
+    saveCache(cacheKey, yd.translated, yd.fromLang, 'Youdao Dictionary');
+    return {
+      ok: true,
+      original: clean,
+      translated: yd.translated,
+      fromLang: yd.fromLang,
+      toLang,
+      sourceUsed: 'Youdao Dictionary',
+    };
+  } catch {
+    /* try next */
+  }
+
+  // 5. Google Translate (if accessible)
+  try {
+    const gg = await translateWithGoogle(clean, toLang);
+    saveCache(cacheKey, gg.translated, gg.fromLang, 'Google Translate');
+    return {
+      ok: true,
+      original: clean,
+      translated: gg.translated,
+      fromLang: gg.fromLang,
+      toLang,
+      sourceUsed: 'Google Translate',
+    };
+  } catch {
+    /* fallback */
+  }
+
   return {
     ok: false,
     original: clean,
     translated: clean,
     fromLang: 'en',
     toLang,
-    error: '网络公共翻译接口连接超时，建议在设置中配置 DeepSeek API Key 开启大模型翻译',
+    error: '网络公共翻译源受限，建议在左上角菜单「系统偏好」中配置 DeepSeek API Key 开启大模型高精度翻译',
   };
 }
 

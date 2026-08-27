@@ -684,6 +684,23 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                   {/* 自定义大模型参数配置 */}
                   {translationConfig.provider === 'custom_llm' && (
                     <div className="space-y-2 rounded-lg border border-accent/30 bg-accent/5 p-2.5 text-xs animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-accent">大模型参数配置</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTranslationConfig({
+                              customBaseUrl: 'https://api.deepseek.com/v1',
+                              customModel: 'deepseek-chat',
+                            });
+                            showToast('已填入 DeepSeek 官方默认地址与模型', 'info');
+                          }}
+                          className="text-[10px] text-accent underline hover:text-accent-hover"
+                        >
+                          一键填入 DeepSeek 预设
+                        </button>
+                      </div>
+
                       <div>
                         <label className="block text-[10px] text-muted mb-0.5">Base URL (API 根地址):</label>
                         <input

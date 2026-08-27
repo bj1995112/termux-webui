@@ -312,14 +312,11 @@ export default function TermView({ sessionId, active }: Props) {
 
     const applySelection = (p1: Cell, p2: Cell) => {
       const { start, end } = normalize(p1, p2);
-      const vy = term.buffer.active.viewportY || 0;
-      const startVRow = start.row - vy;
-      const endVRow = end.row - vy;
       if (start.row === end.row) {
-        term.select(start.col, startVRow, end.col - start.col + 1);
+        term.select(start.col, start.row, end.col - start.col + 1);
       } else {
         const length = (end.row - start.row) * term.cols + (end.col - start.col) + 1;
-        term.select(start.col, startVRow, length);
+        term.select(start.col, start.row, length);
       }
       setHandles({ a: start, b: end });
     };
