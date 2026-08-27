@@ -5,11 +5,12 @@ import type { TranslationAnchor } from '../lib/streamPipeline.js';
 interface Props {
   term: Terminal | null;
   anchors: TranslationAnchor[];
+  visible?: boolean; // Toggle overlay visibility to peek raw English instantly
 }
 
-export const AnchorOverlay: React.FC<Props> = ({ term, anchors }) => {
+export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }) => {
   const visibleAnchors = useMemo(() => {
-    if (!term || anchors.length === 0) return [];
+    if (!term || !visible || anchors.length === 0) return [];
     const buf = term.buffer.active;
     const viewportY = buf.viewportY;
     const rows = term.rows;
@@ -17,9 +18,9 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors }) => {
     return anchors.filter(
       (a) => a.bufferRow >= viewportY && a.bufferRow < viewportY + rows,
     );
-  }, [term, anchors]);
+  }, [term, anchors, visible]);
 
-  if (!term || visibleAnchors.length === 0) return null;
+  if (!term || !visible || visibleAnchors.length === 0) return null;
 
   const core = (
     term as unknown as {
@@ -41,7 +42,9 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors }) => {
   const screenOffsetTop = screenEl?.offsetTop ?? 0;
   const rowDivs = rowsEl ? (Array.from(rowsEl.children) as HTMLElement[]) : [];
 
-  const viewportY = term.buffer.active.viewportY;
+  const buf = term.buffer.active;
+  const viewportY = buf.viewportY;
+  const cursorAbsRow = buf.cursorY + buf.baseY;
   const themeBg = term.options.theme?.background || '#1a1b26';
 
   return (
@@ -63,6 +66,11 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors }) => {
         // Solid background mask to completely conceal underlying English characters
         const minMaskWidth = (anchor.endCol - anchor.startCol) * cellWidth;
 
+        // Detect if this anchor corresponds to the actively selected / focused option
+        const isCursorRow = anchor.bufferRow === cursorAbsRow;
+        const isSelectionMarker = /^[❯>●*✔✓]/.test(anchor.originalText) || anchor.originalText.includes('❯');
+        const isActiveSelected = isCursorRow || isSelectionMarker;
+
         return (
           <div
             key={anchor.id}
@@ -73,15 +81,21 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors }) => {
               height: `${height}px`,
               lineHeight: `${height}px`,
               minWidth: `${minMaskWidth}px`,
-              padding: '0 2px',
+              padding: '0 4px',
               whiteSpace: 'pre',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               fontFamily: term.options.fontFamily || 'monospace',
               fontSize: `${term.options.fontSize}px`,
-              color: 'var(--text, #c0caf5)',
-              background: themeBg,
-              zIndex: 35,
+              // Active selected option gets glowing blue highlight & crisp white text
+              color: isActiveSelected ? '#ffffff' : 'var(--text, #c0caf5)',
+              fontWeight: isActiveSelected ? 600 : 400,
+              background: isActiveSelected ? 'rgba(59, 130, 246, 0.28)' : themeBg,
+              borderLeft: isActiveSelected ? '3px solid #60a5fa' : 'none',
+              boxShadow: isActiveSelected ? 'inset 0 0 12px rgba(59, 130, 246, 0.2)' : 'none',
+              borderRadius: isActiveSelected ? '2px' : '0px',
+              zIndex: isActiveSelected ? 40 : 35,
+              transition: 'background 0.05s ease, border 0.05s ease',
             }}
           >
             {anchor.translatedText}
