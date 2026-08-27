@@ -280,6 +280,11 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'settings': '设置',
   'export': '导出',
   'import': '导入',
+  'fork': '派生 (fork)',
+  'clone': '克隆 (clone)',
+  'tree': '目录树 (tree)',
+  'hotkeys': '快捷键 (hotkeys)',
+  'changelog': '更新日志 (changelog)',
 
   // === 6. Interactive Menus & CLI Questions ===
   '? Project name:': '? 项目名称：',

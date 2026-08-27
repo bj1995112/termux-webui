@@ -4,24 +4,23 @@ import { DEV_TOOL_EXACT_DICT, DEV_TOOL_TEMPLATES } from '@termux-webui/shared';
 export type TranslateFunction = (text: string) => Promise<string>;
 
 /**
- * Industrial Stream Terminal Translator with Word-Boundary Protection
- * 1. Word Boundary & Hyphen Immunity: Prevents broken tokens like "scoped-模型s"
- * 2. Strict CJK Single-Line Balance: Ensures Inquirer/Ink ANSI cursor positioning is 100% accurate
- * 3. URL & Path Shielding: 100% immune to link mistranslation
- * 4. Microsecond Fast Zero-Flicker Stream Pipeline
+ * Single-Pass Tokenized Terminal Stream Translator
+ * 1. Single-Pass Execution: Uses word-level tokenizer to prevent cascading double-translation (e.g. "设置设置").
+ * 2. Strict Word-Level Isolation: Each token is translated AT MOST ONCE.
+ * 3. Accurate IT Developer Lexicon: "fork" -> "派生", "export" -> "导出", "clone" -> "克隆".
+ * 4. URL & Path Immunity: 100% untouched links.
  */
 export class TerminalTranslator {
   private term: Terminal;
   private translateFn: TranslateFunction;
   private exactDictMap = new Map<string, string>();
-  private sortedPhrases: Array<{ pattern: RegExp; rawLen: number; target: string }> = [];
   private isEnabled = true;
 
   constructor(term: Terminal, translateFn: TranslateFunction) {
     this.term = term;
     this.translateFn = translateFn;
 
-    this.rebuildPhraseIndex(DEV_TOOL_EXACT_DICT);
+    this.rebuildDictMap(DEV_TOOL_EXACT_DICT);
     void this.fetchRemoteAndLearnedDicts();
   }
 
@@ -30,59 +29,26 @@ export class TerminalTranslator {
   }
 
   public clear(): void {
-    this.rebuildPhraseIndex(DEV_TOOL_EXACT_DICT);
+    this.rebuildDictMap(DEV_TOOL_EXACT_DICT);
   }
 
-  /**
-   * Rebuilds search index with strict word-boundary protection.
-   * Prevents sub-word mutilation (e.g. scoped-models -> scoped-模型s).
-   */
-  private rebuildPhraseIndex(dict: Record<string, string>): void {
+  private rebuildDictMap(dict: Record<string, string>): void {
     this.exactDictMap.clear();
-    const list: Array<{ raw: string; rawLen: number; target: string; isWord: boolean }> = [];
-
     for (const [k, v] of Object.entries(dict)) {
-      const trimmed = k.trim();
-      if (trimmed.length < 2) continue;
-      this.exactDictMap.set(trimmed.toLowerCase(), v);
-
-      const isWord = /^[a-zA-Z0-9_-]+$/.test(trimmed) && !trimmed.startsWith('/');
-      list.push({
-        raw: trimmed,
-        rawLen: trimmed.length,
-        target: v,
-        isWord,
-      });
+      const trimmed = k.trim().toLowerCase();
+      if (trimmed.length >= 2) {
+        this.exactDictMap.set(trimmed, v);
+      }
     }
-
-    list.sort((a, b) => b.rawLen - a.rawLen);
-
-    this.sortedPhrases = list.map((item) => {
-      const escaped = item.raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // If it's a pure identifier/word, enforce non-word/non-hyphen boundaries
-      const patternStr = item.isWord
-        ? `(?<=^|[^a-zA-Z0-9_-])${escaped}(?=$|[^a-zA-Z0-9_-])`
-        : escaped;
-
-      return {
-        pattern: new RegExp(patternStr, 'gi'),
-        rawLen: item.rawLen,
-        target: item.target,
-      };
-    });
   }
 
-  /**
-   * Pre-fetches official dictionary and learned dictionary from backend.
-   */
   private async fetchRemoteAndLearnedDicts(): Promise<void> {
     try {
       const res = await fetch('/api/dictionary');
       if (res.ok) {
         const data = (await res.json()) as { entries?: Record<string, string> };
         if (data && data.entries) {
-          const merged = { ...DEV_TOOL_EXACT_DICT, ...data.entries };
-          this.rebuildPhraseIndex(merged);
+          this.rebuildDictMap({ ...DEV_TOOL_EXACT_DICT, ...data.entries });
         }
       }
     } catch {
@@ -90,9 +56,6 @@ export class TerminalTranslator {
     }
   }
 
-  /**
-   * Ingests raw PTY chunk before xterm Buffer.
-   */
   public ingest(rawChunk: string): void {
     if (!this.isEnabled) {
       this.term.write(rawChunk);
@@ -108,52 +71,43 @@ export class TerminalTranslator {
   }
 
   /**
-   * Transforms stream chunk safely without breaking ANSI codes or subwords.
+   * Single-Pass Tokenizer & Replacer:
+   * Splits into ANSI sequences, words, and delimiters. Translates each word AT MOST ONCE.
    */
   private transformStream(chunk: string): string {
     if (!/[A-Za-z]{2,}/.test(chunk)) {
       return chunk;
     }
 
-    // Tokenize chunk into ANSI escape sequences vs visible text
+    // Split chunk into ANSI sequences vs visible text chunks
     // eslint-disable-next-line no-control-regex
-    const tokens = chunk.split(/(\x1b\[[0-9;]*[a-zA-Z]|\x1b\([a-zA-Z]|\x1b\][^\x07\x1b]*\x07)/g);
+    const parts = chunk.split(/(\x1b\[[0-9;]*[a-zA-Z]|\x1b\([a-zA-Z]|\x1b\][^\x07\x1b]*\x07)/g);
 
-    for (let i = 0; i < tokens.length; i += 1) {
-      let token = tokens[i];
-      if (!token || token.startsWith('\x1b')) {
+    for (let pIdx = 0; pIdx < parts.length; pIdx += 1) {
+      const part = parts[pIdx];
+      if (!part || part.startsWith('\x1b') || !/[A-Za-z]{2,}/.test(part)) {
         continue;
       }
 
-      if (!/[A-Za-z]{2,}/.test(token)) {
-        continue;
-      }
-
-      // Skip lines that already contain substantive Chinese
-      const chineseCount = (token.match(/[\u4e00-\u9fa5]/g) || []).length;
-      if (chineseCount >= 4) {
-        continue;
-      }
-
-      // === SHIELDING STEP 1: Shield URLs and File Paths ===
+      // Step 1: Shield URLs & Paths
       const shields: string[] = [];
-      token = token.replace(/(https?:\/\/[^\s\x1b\x07)\]'"]+)/gi, (match) => {
+      let shielded = part.replace(/(https?:\/\/[^\s\x1b\x07)\]'"]+)/gi, (match) => {
         const id = `__URL_SHIELD_${shields.length}__`;
         shields.push(match);
         return id;
       });
 
-      token = token.replace(/((?:\/|[a-zA-Z]:\\|\.\/|\.\.\/)[\w.-]+(?:\/[\w.-]+)+)/g, (match) => {
+      shielded = shielded.replace(/((?:\/|[a-zA-Z]:\\|\.\/|\.\.\/)[\w.-]+(?:\/[\w.-]+)+)/g, (match) => {
         const id = `__PATH_SHIELD_${shields.length}__`;
         shields.push(match);
         return id;
       });
 
-      // === TRANSLATION STEP 2: Template & Greedy Matching ===
+      // Step 2: Check Dynamic Templates first
       let templateMatched = false;
       for (const tpl of DEV_TOOL_TEMPLATES) {
-        if (tpl.pattern.test(token)) {
-          token = token.replace(
+        if (tpl.pattern.test(shielded)) {
+          shielded = shielded.replace(
             tpl.pattern,
             tpl.replace as (substring: string, ...args: unknown[]) => string,
           );
@@ -162,66 +116,39 @@ export class TerminalTranslator {
       }
 
       if (!templateMatched) {
-        const trimmed = token.trim();
-        const exact = this.exactDictMap.get(trimmed.toLowerCase());
-        if (exact) {
-          token = token.replace(trimmed, exact);
+        // Step 3: Exact whole-line / whole-phrase match first
+        const trimmedLower = shielded.trim().toLowerCase();
+        const wholeExact = this.exactDictMap.get(trimmedLower);
+        if (wholeExact) {
+          shielded = shielded.replace(shielded.trim(), wholeExact);
         } else {
-          let modified = token;
-          for (const phrase of this.sortedPhrases) {
-            if (phrase.pattern.test(modified)) {
-              modified = modified.replace(phrase.pattern, phrase.target);
-              phrase.pattern.lastIndex = 0;
-            }
-          }
-          token = modified;
+          // Step 4: Single-Pass Word Tokenization (Prevents double replacement like "设置设置")
+          // Matches slash commands, hyphenated words, or standard identifiers
+          shielded = shielded.replace(
+            /(\/[a-zA-Z0-9_-]{2,20}|[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*)/g,
+            (token) => {
+              const lower = token.toLowerCase();
+              const found = this.exactDictMap.get(lower);
+              if (found) {
+                return found;
+              }
+              return token;
+            },
+          );
         }
       }
 
-      // === UNSHIELDING STEP 3: Restore URLs & Paths ===
+      // Step 5: Restore URLs & Paths
       for (let sIdx = 0; sIdx < shields.length; sIdx += 1) {
         const urlId = `__URL_SHIELD_${sIdx}__`;
         const pathId = `__PATH_SHIELD_${sIdx}__`;
-        token = token.split(urlId).join(shields[sIdx]);
-        token = token.split(pathId).join(shields[sIdx]);
+        shielded = shielded.split(urlId).join(shields[sIdx]);
+        shielded = shielded.split(pathId).join(shields[sIdx]);
       }
 
-      tokens[i] = token;
-
-      // Background learn for standalone english phrases (must not be hyphenated code identifiers)
-      const finalTrimmed = token.trim();
-      if (
-        shields.length === 0 &&
-        finalTrimmed.length >= 4 &&
-        finalTrimmed.length <= 80 &&
-        finalTrimmed.includes(' ') && // Only learn multi-word phrases to avoid corrupting code variables
-        !finalTrimmed.startsWith('--') &&
-        !/^[0-9a-f]{7,40}$/i.test(finalTrimmed)
-      ) {
-        void this.asyncTranslateAndLearn(finalTrimmed);
-      }
+      parts[pIdx] = shielded;
     }
 
-    return tokens.join('');
-  }
-
-  private async asyncTranslateAndLearn(text: string): Promise<void> {
-    const key = text.toLowerCase();
-    if (this.exactDictMap.has(key)) return;
-
-    try {
-      const translated = await this.translateFn(text);
-      if (translated && translated !== text) {
-        this.exactDictMap.set(key, translated);
-        const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        this.sortedPhrases.unshift({
-          pattern: new RegExp(escaped, 'gi'),
-          rawLen: text.length,
-          target: translated,
-        });
-      }
-    } catch {
-      /* ignore */
-    }
+    return parts.join('');
   }
 }
