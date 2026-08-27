@@ -14,7 +14,7 @@ export type TranslateFunction = (text: string) => Promise<string>;
 
 /**
  * High-Speed Reactive Terminal Stream Pipeline
- * Provides ultra-responsive 30ms anchor synchronization for interactive menus (TUI / arrow keys).
+ * Dual-stream parser that protects the active cursor typing row from any visual interference.
  */
 export class TerminalStreamPipeline {
   private term: Terminal;
@@ -91,15 +91,15 @@ export class TerminalStreamPipeline {
     }> = [];
 
     for (let row = start; row < end; row += 1) {
+      // 100% strictly protect the active typing cursor row: NEVER place visual overlay on it
+      if (row === cursorAbsRow) {
+        continue;
+      }
+
       const line = buf.getLine(row);
       if (!line) continue;
       const rawStr = line.translateToString(true);
       const trimmed = rawStr.trim();
-
-      // Only skip if user is actively typing in a standard bash prompt line (e.g. root@localhost:~# ...)
-      if (row === cursorAbsRow && this.isShellPromptLine(trimmed)) {
-        continue;
-      }
 
       // Check if line is eligible for translation
       if (!this.isValidTranslatableLine(trimmed)) continue;
@@ -169,12 +169,6 @@ export class TerminalStreamPipeline {
         }
       }),
     );
-  }
-
-  private isShellPromptLine(text: string): boolean {
-    if (/^[\w.-]+@[\w.-]+[:#$~>\s]/.test(text)) return true;
-    if (/^[#$%>]\s/.test(text)) return true;
-    return false;
   }
 
   private isValidTranslatableLine(text: string): boolean {

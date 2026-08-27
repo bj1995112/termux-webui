@@ -44,7 +44,6 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }
 
   const buf = term.buffer.active;
   const viewportY = buf.viewportY;
-  const cursorAbsRow = buf.cursorY + buf.baseY;
   const themeBg = term.options.theme?.background || '#1a1b26';
 
   return (
@@ -66,10 +65,27 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }
         // Solid background mask to completely conceal underlying English characters
         const minMaskWidth = (anchor.endCol - anchor.startCol) * cellWidth;
 
-        // Detect active selected option: cursor is on this row OR text has selection marker
-        const isCursorRow = anchor.bufferRow === cursorAbsRow;
-        const hasSelectionMarker = /^[❯>●*✔✓]/.test(anchor.originalText) || anchor.originalText.includes('❯') || anchor.originalText.includes('›');
-        const isActiveSelected = isCursorRow || hasSelectionMarker;
+        // Direct ANSI & Terminal State Check for Active Selected Option
+        let isAnsiSelected = false;
+        const line = buf.getLine(anchor.bufferRow);
+        if (line) {
+          // Check if any character cell in this anchor has inverse or highlight background
+          const checkLen = Math.min(line.length, anchor.endCol);
+          for (let col = anchor.startCol; col < checkLen; col += 1) {
+            const cell = line.getCell(col);
+            if (cell) {
+              if (cell.isInverse() || (cell.getBgColor() !== -1 && cell.getBgColor() !== 0)) {
+                isAnsiSelected = true;
+                break;
+              }
+            }
+          }
+          // Also check text marker (❯, >, ●, *, ✔, [x])
+          const rawText = line.translateToString(true);
+          if (/[❯>●*✔✓]|\[x\]|\[\*\]/i.test(rawText)) {
+            isAnsiSelected = true;
+          }
+        }
 
         return (
           <div
@@ -88,13 +104,13 @@ export const AnchorOverlay: React.FC<Props> = ({ term, anchors, visible = true }
               fontFamily: term.options.fontFamily || 'monospace',
               fontSize: `${term.options.fontSize}px`,
               // Distinct visual styles for active selected item vs regular items
-              color: isActiveSelected ? '#ffffff' : 'var(--text, #c0caf5)',
-              fontWeight: isActiveSelected ? 700 : 400,
-              background: isActiveSelected ? 'rgba(59, 130, 246, 0.35)' : themeBg,
-              borderLeft: isActiveSelected ? '4px solid #3b82f6' : 'none',
-              boxShadow: isActiveSelected ? '0 0 12px rgba(59, 130, 246, 0.35)' : 'none',
-              borderRadius: isActiveSelected ? '3px' : '0px',
-              zIndex: isActiveSelected ? 40 : 35,
+              color: isAnsiSelected ? '#ffffff' : 'var(--text, #c0caf5)',
+              fontWeight: isAnsiSelected ? 700 : 400,
+              background: isAnsiSelected ? 'rgba(59, 130, 246, 0.40)' : themeBg,
+              borderLeft: isAnsiSelected ? '4px solid #3b82f6' : 'none',
+              boxShadow: isAnsiSelected ? '0 0 16px rgba(59, 130, 246, 0.45)' : 'none',
+              borderRadius: isAnsiSelected ? '3px' : '0px',
+              zIndex: isAnsiSelected ? 40 : 35,
               transition: 'background 0.08s ease, border-color 0.08s ease, color 0.08s ease',
             }}
           >
