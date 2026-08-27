@@ -71,6 +71,37 @@ function findUrlAtCell(term: Terminal, cell: Cell): string | null {
   return null;
 }
 
+/** Find exact word boundaries at cell */
+function findWordBoundsAtCell(term: Terminal, cell: Cell): { start: Cell; end: Cell } {
+  try {
+    const line = term.buffer.active.getLine(cell.row);
+    if (!line) return { start: cell, end: cell };
+    const str = line.translateToString(true);
+    if (!str) return { start: cell, end: cell };
+
+    const len = str.length;
+    let startCol = Math.min(Math.max(0, cell.col), len - 1);
+    let endCol = startCol;
+
+    const isSpace = /\s/.test(str[startCol] || '');
+    if (isSpace) {
+      while (startCol > 0 && /\s/.test(str[startCol - 1])) startCol--;
+      while (endCol < len - 1 && /\s/.test(str[endCol + 1])) endCol++;
+    } else {
+      const isWordChar = (c: string) => /[a-zA-Z0-9_\-\.\/:]/.test(c);
+      while (startCol > 0 && isWordChar(str[startCol - 1])) startCol--;
+      while (endCol < len - 1 && isWordChar(str[endCol + 1])) endCol++;
+    }
+
+    return {
+      start: { col: startCol, row: cell.row },
+      end: { col: endCol, row: cell.row },
+    };
+  } catch {
+    return { start: cell, end: cell };
+  }
+}
+
 export default function TermView({ sessionId, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -263,8 +294,9 @@ export default function TermView({ sessionId, active }: Props) {
       const scr = screen();
       if (!scr) return null;
       const rect = scr.getBoundingClientRect();
-      const cw = rect.width / Math.max(term.cols, 1);
-      const ch = rect.height / Math.max(term.rows, 1);
+      const core = (term as unknown as { _core?: { _renderService?: { dimensions?: { actualCellWidth: number; actualCellHeight: number } } } })._core;
+      const cw = core?._renderService?.dimensions?.actualCellWidth || (rect.width / Math.max(term.cols, 1));
+      const ch = core?._renderService?.dimensions?.actualCellHeight || (rect.height / Math.max(term.rows, 1));
       const col = Math.max(0, Math.min(term.cols - 1, Math.floor((x - rect.left) / cw)));
       const vRow = Math.max(0, Math.min(term.rows - 1, Math.floor((y - rect.top) / ch)));
       const vy = term.buffer.active.viewportY || 0;
@@ -390,14 +422,10 @@ export default function TermView({ sessionId, active }: Props) {
           parked = [];
           selectMoveOrigin = pressPoint;
 
-          const vy = term.buffer.active.viewportY || 0;
-          const startRow = Math.max(vy, hit.row - 1);
-          const endRow = Math.min(vy + term.rows - 1, hit.row + 1);
-          const p1: Cell = { col: 0, row: startRow };
-          const p2: Cell = { col: Math.max(0, term.cols - 1), row: endRow };
-          anchorCellRef.current = hit;
-          applySelection(p1, p2);
-          setShowBar(false);
+          const bounds = findWordBoundsAtCell(term, hit);
+          anchorCellRef.current = bounds.start;
+          applySelection(bounds.start, bounds.end);
+          setShowBar(true);
         }, LONG_PRESS_MS);
       }
     };
@@ -633,12 +661,13 @@ export default function TermView({ sessionId, active }: Props) {
     const cell = handles[which];
     const hostRect = host.getBoundingClientRect();
     const rect = scr.getBoundingClientRect();
-    const cw = rect.width / Math.max(term.cols, 1);
-    const ch = rect.height / Math.max(term.rows, 1);
+    const core = (term as unknown as { _core?: { _renderService?: { dimensions?: { actualCellWidth: number; actualCellHeight: number } } } })._core;
+    const cw = core?._renderService?.dimensions?.actualCellWidth || (rect.width / Math.max(term.cols, 1));
+    const ch = core?._renderService?.dimensions?.actualCellHeight || (rect.height / Math.max(term.rows, 1));
     const vy = term.buffer.active.viewportY || 0;
     if (cell.row < vy || cell.row >= vy + term.rows) return null;
     return {
-      left: rect.left - hostRect.left + cell.col * cw,
+      left: rect.left - hostRect.left + (which === 'a' ? cell.col * cw : (cell.col + 1) * cw),
       top: rect.top - hostRect.top + (cell.row - vy) * ch,
     };
   };
