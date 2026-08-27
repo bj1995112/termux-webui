@@ -8,7 +8,8 @@ import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
 import { THEMES } from '../theme.js';
 import { TerminalTranslator } from '../lib/terminalTranslator.js';
-import { CHINESE_SLASH_CMD_MAP } from '@termux-webui/shared';
+import { CHINESE_SLASH_CMD_MAP, DETAILED_COMMAND_HELP_MAP } from '@termux-webui/shared';
+import { ActiveCommandPreview } from '../components/ActiveCommandPreview.js';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
 const fitFns = new Map<string, () => void>();
@@ -119,6 +120,8 @@ export default function TermView({ sessionId, active }: Props) {
     translated: string;
     loading: boolean;
   } | null>(null);
+
+  const [activeHelp, setActiveHelp] = useState<(typeof DETAILED_COMMAND_HELP_MAP)[string] | null>(null);
 
   const translateText = useDeck((s) => s.translateText);
   const showTranslation = useDeck((s) => s.showTranslation);
@@ -237,6 +240,29 @@ export default function TermView({ sessionId, active }: Props) {
         inputLineBuf += data;
       }
       deckSocket.send({ type: 'input', sessionId, data });
+    });
+
+    term.onCursorMove(() => {
+      try {
+        const buffer = term.buffer.active;
+        const line = buffer.getLine(buffer.cursorY + buffer.baseY);
+        if (line) {
+          const text = line.translateToString(true).trim();
+          let matched = false;
+          for (const [cmd, help] of Object.entries(DETAILED_COMMAND_HELP_MAP)) {
+            if (text.includes(cmd) || text.includes(help.title)) {
+              setActiveHelp(help);
+              matched = true;
+              break;
+            }
+          }
+          if (!matched && !text.startsWith('/')) {
+            setActiveHelp(null);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
     });
 
     const fitNow = () => {
@@ -890,6 +916,15 @@ export default function TermView({ sessionId, active }: Props) {
           <button onClick={doCancel} className="sel-bar-btn">取消</button>
         </div>
       )}
+
+      {/* Immersive Floating Active Command Preview Capsule */}
+      <ActiveCommandPreview
+        activeHelp={activeHelp}
+        onExecute={(enCmd) => {
+          deckSocket.send({ type: 'input', sessionId, data: enCmd + '\r' });
+          setActiveHelp(null);
+        }}
+      />
     </div>
   );
 }
