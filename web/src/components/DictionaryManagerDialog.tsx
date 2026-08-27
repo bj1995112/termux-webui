@@ -20,6 +20,16 @@ interface Props {
   onClose: () => void;
 }
 
+// Authenticated Fetch Helper that attaches Bearer Token
+async function authFetch(url: string, init?: RequestInit): Promise<Response> {
+  const token = localStorage.getItem('twui.token') || '';
+  const headers = new Headers(init?.headers || {});
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return fetch(url, { ...init, headers });
+}
+
 export function DictionaryManagerDialog({ open, onClose }: Props) {
   const [tab, setTab] = useState<'commands' | 'sources' | 'miner' | 'learned'>('commands');
   const [search, setSearch] = useState('');
@@ -50,7 +60,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch('/api/dictionary/sync-status');
+      const res = await authFetch('/api/dictionary/sync-status');
       if (res.ok) {
         const data = await res.json();
         setSyncStatus(data);
@@ -62,7 +72,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
 
   const fetchLearned = async () => {
     try {
-      const res = await fetch('/api/dictionary/learned');
+      const res = await authFetch('/api/dictionary/learned');
       if (res.ok) {
         const data = (await res.json()) as LearnedEntry[];
         if (Array.isArray(data)) {
@@ -85,17 +95,17 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
   const handleSyncLatest = async () => {
     setSyncing(true);
     try {
-      const res = await fetch('/api/dictionary/sync', { method: 'POST' });
+      const res = await authFetch('/api/dictionary/sync', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        showToast(data.message || '同步完成');
+        showToast(data.message || '增量同步完成');
         void fetchStatus();
         void fetchLearned();
       } else {
-        showToast('同步失败，请检查网络');
+        showToast(`同步响应：${data.message || '未发现更新'}`);
       }
     } catch {
-      showToast('网络连接超时');
+      showToast('网络连接超时，请重试');
     } finally {
       setSyncing(false);
     }
@@ -112,7 +122,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
     const fullCmd = cmd.startsWith('/') ? cmd : `/${cmd}`;
     const fullZh = `${fullCmd} ${zh}`;
     try {
-      const res = await fetch('/api/dictionary/entry', {
+      const res = await authFetch('/api/dictionary/entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ original: fullCmd, translated: fullZh }),
@@ -123,9 +133,11 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
         showToast(`✅ 成功添加命令：${fullCmd}`);
         void fetchLearned();
         void fetchStatus();
+      } else {
+        showToast('添加失败');
       }
     } catch {
-      showToast('添加失败');
+      showToast('网络请求异常');
     }
   };
 
@@ -136,7 +148,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
       return;
     }
     try {
-      const res = await fetch('/api/commands/sources', {
+      const res = await authFetch('/api/commands/sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newSourceName.trim(), url: newSourceUrl.trim() }),
@@ -146,16 +158,18 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
         setNewSourceName('');
         setNewSourceUrl('');
         void fetchStatus();
+      } else {
+        showToast('添加失败');
       }
     } catch {
-      showToast('添加失败');
+      showToast('请求异常');
     }
   };
 
   // Delete source repo
   const handleDeleteSource = async (id: string) => {
     try {
-      const res = await fetch(`/api/commands/sources/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`/api/commands/sources/${id}`, { method: 'DELETE' });
       if (res.ok) {
         showToast('已移除仓库');
         void fetchStatus();
@@ -168,7 +182,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
   // Delete learned entry
   const handleDeleteLearned = async (orig: string) => {
     try {
-      const res = await fetch('/api/dictionary/entry', {
+      const res = await authFetch('/api/dictionary/entry', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ original: orig }),
@@ -191,7 +205,7 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
     }
     setMining(true);
     try {
-      const res = await fetch('/api/commands/mine', {
+      const res = await authFetch('/api/commands/mine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: minerText }),
@@ -202,6 +216,8 @@ export function DictionaryManagerDialog({ open, onClose }: Props) {
         showToast(`🎉 成功萃取并自动汉化收录了 ${data.added.length} 条全新命令！`);
         void fetchStatus();
         void fetchLearned();
+      } else {
+        showToast('未在文本中解析到新命令');
       }
     } catch {
       showToast('解析失败');

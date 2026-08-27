@@ -156,19 +156,32 @@ class CommandStudioManager {
   public async syncLatest(): Promise<{ success: boolean; newAddedCount: number; message: string }> {
     let fetchedData: { version?: string; entries?: Record<string, string> } | null = null;
 
+    // 1. Try local data/official_dict.json fallback first for 100% offline reliability
+    try {
+      const localFile = path.resolve(STORAGE_DIR, '../../data/official_dict.json');
+      const localRaw = await fs.readFile(localFile, 'utf-8');
+      fetchedData = JSON.parse(localRaw) as { version?: string; entries?: Record<string, string> };
+    } catch {
+      /* ignore */
+    }
+
+    // 2. Try remote mirrors
     for (const url of REMOTE_DICT_URLS) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 4000);
+        const timeout = setTimeout(() => controller.abort(), 3000);
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(timeout);
 
         if (res.ok) {
-          fetchedData = (await res.json()) as { version?: string; entries?: Record<string, string> };
-          break;
+          const remoteJson = (await res.json()) as { version?: string; entries?: Record<string, string> };
+          if (remoteJson?.entries) {
+            fetchedData = remoteJson;
+            break;
+          }
         }
       } catch {
-        /* try next fallback */
+        /* try next mirror */
       }
     }
 
