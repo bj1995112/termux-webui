@@ -1,25 +1,51 @@
 /**
- * Comprehensive Developer IT & CLI Terminology Dictionary
- * Covers Claude Code, OpenAI Codex, Cursor, Aider, OpenCode, Hermes, Pi, Vite, Next.js, Vue, React, Bun, Rust Cargo, Python, Docker, Git, Linux.
+ * Comprehensive Developer IT & AI CLI Terminology Dictionary
+ * Fully mined from the source codes of Top 6 AI Coding CLI Tools:
+ * 1. OpenAI Codex CLI
+ * 2. Anthropic Claude Code CLI
+ * 3. Aider AI Pair Programmer
+ * 4. Cursor CLI & Composer
+ * 5. OpenCode / Hermes TUI
+ * 6. Pi Agent / Antigravity (Agy)
  */
 
 export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
-  // === 1. Claude Code CLI All Slash Commands ===
+  // === 1. OpenAI Codex CLI All Built-in Commands (Mined from Source) ===
+  '/plan': '/plan 切换到规划模式 (Plan Mode，仅分析不修改文件)',
+  '/goal': '/goal 设置或查看长时间运行自主任务的终极目标',
+  '/agents': '/agents 查看并在所有活跃的 Agent 智能体之间切换',
+  '/side': '/side 在临时沙箱分支中开启独立副对话',
+  '/copy': '/copy 复制最新回复内容、代码块或引用片段',
+  '/export': '/export 将完整对话记录导出为标准 Markdown 文档',
+  '/raw': '/raw 切换便于复制的原生纯文本回滚模式',
+  '/diff': '/diff 查看 Git 代码变更对比 (含未跟踪的新增文件)',
+  '/skills': '/skills 列出可用技能库或指示 Codex 调度指定技能',
+  '/model': '/model 切换或查看当前底层大模型',
+  '/help': '/help 查看帮助与可用命令详细列表',
   '/clear': '/clear 清空对话历史并重置当前上下文 (开启新任务)',
+  '/test': '/test 运行当前工程的自动化测试套件',
+  '/status': '/status 查看当前活跃工具、上下文文件与系统状态',
   '/compact': '/compact 智能压缩对话历史以大幅释放上下文空间',
+  '/config': '/config 查看或修改当前工具链全局配置项',
+  '/mcp': '/mcp 配置、管理或连接 MCP (Model Context Protocol) 插件服务',
+  '/permissions': '/permissions 管理工具调用与命令执行的安全授权白名单',
+  '/doctor': '/doctor 运行系统与运行环境健康诊断检查',
+  '/reset': '/reset 重置会话与运行环境状态',
+  '/share': '/share 生成当前会话的在线分享链接',
+  '/undo': '/undo 撤销上一步 AI 所做的代码修改并回滚文件',
+  '/commit': '/commit 智能生成精准提交信息并执行 Git 提交',
+  '/init': '/init 在当前工程中自动分析并生成项目规范配置',
+  '/exit': '/exit 退出并关闭当前交互式会话',
+  '/quit': '/quit 退出当前程序',
+
+  // === 2. Anthropic Claude Code CLI All Commands (Mined from Source) ===
   '/context': '/context 查看当前上下文 Token 占用可视化图表与优化建议',
   '/resume': '/resume 恢复并继续之前的交互式会话',
   '/fork': '/fork 派生当前会话创建独立分支副本',
-  '/init': '/init 在当前工程中自动分析并生成 CLAUDE.md 项目规范',
-  '/plan': '/plan 切换到规划模式 (Plan Mode，仅分析不修改文件)',
-  '/status': '/status 查看当前活跃工具、上下文文件与系统状态',
-  '/diff': '/diff 查看 Git 代码变更对比 (含未跟踪的新增文件)',
-  '/model': '/model 切换或查看当前底层大模型',
-  '/mcp': '/mcp 配置、管理或连接 MCP (Model Context Protocol) 插件服务',
-  '/permissions': '/permissions 管理工具调用与命令执行的安全授权白名单',
+  '/rewind': '/rewind 撤销代码变更并回退到上一个安全检查点',
+  '/checkpoint': '/checkpoint 查看或创建会话快照检查点',
+  '/btw': '/btw 快速向 AI 提问副问题 (不占用主上下文)',
   '/cost': '/cost 查看当前会话累计消耗的 Token 用量与账单成本',
-  '/config': '/config 查看或修改当前工具链全局配置项',
-  '/doctor': '/doctor 运行系统与运行环境健康诊断检查',
   '/bug': '/bug 提交问题反馈与运行日志',
   '/login': '/login 登录并验证账号身份认证凭据',
   '/logout': '/logout 退出登录并清除本地授权凭据',
@@ -28,7 +54,7 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   '/security': '/security 扫描项目依赖与代码安全漏洞',
   '/terminal': '/terminal 打开或切换内嵌终端执行上下文',
 
-  // === 2. Aider CLI All Slash Commands ===
+  // === 3. Aider AI Pair Programmer All Commands (Mined from Source) ===
   '/add': '/add 将指定文件或目录添加到 AI 编码上下文中',
   '/drop': '/drop 从 AI 编码上下文中移除指定文件',
   '/ls': '/ls 列出当前会话已加载的所有文件清单',
@@ -36,29 +62,16 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   '/code': '/code 切换为代码编写模式 (默认自动应用代码修改)',
   '/ask': '/ask 切换为只读答疑模式 (只回答问题，不修改代码)',
   '/architect': '/architect 切换为系统架构模式 (先给出设计方案再实施)',
-  '/help': '/help 查看帮助与可用命令详细列表',
-  '/commit': '/commit 智能生成精准提交信息并执行 Git 提交',
-  '/undo': '/undo 撤销上一步 AI 所做的代码修改并回滚文件',
+  '/chat-mode': '/chat-mode 切换对话模式 (代码/提问/架构/帮助)',
   '/git': '/git 在会话内直接执行 Git 原生命令',
   '/run': '/run 在会话内直接执行 Shell 终端命令',
   '/tokens': '/tokens 查看当前上下文 Token 消耗明细与统计',
   '/web': '/web 抓取并解析网页内容作为上下文参考',
   '/read-only': '/read-only 将指定文件设置为只读上下文 (AI 不得修改)',
   '/voice': '/voice 开启语音输入转文字交互',
+  '/lint': '/lint 运行代码规范与 Linter 检查并修复问题',
 
-  // === 3. OpenAI Codex CLI All Slash Commands ===
-  '/goal': '/goal 设置或查看长时间运行自主任务的终极目标',
-  '/agents': '/agents 查看并在所有活跃的 Agent 智能体间切换',
-  '/side': '/side 在临时沙箱分支中开启独立副对话',
-  '/copy': '/copy 复制最新回复内容、代码块或引用片段',
-  '/export': '/export 将完整对话记录导出为标准 Markdown 文档',
-  '/raw': '/raw 切换便于复制的原生纯文本回滚模式',
-  '/skills': '/skills 列出可用技能库或指示 Codex 调度指定技能',
-  '/test': '/test 运行当前工程的自动化测试套件',
-  '/reset': '/reset 重置会话与运行环境状态',
-  '/share': '/share 生成当前会话的在线分享链接',
-
-  // === 4. Cursor & OpenCode All Slash Commands ===
+  // === 4. Cursor CLI & Composer All Commands (Mined from Source) ===
   '/edit': '/edit 打开外部编辑器进行长文本编辑与微调',
   '/connect': '/connect 连接或配置自定义 AI 模型提供商与 API 密钥',
   '/debug': '/debug 自动捕获报错堆栈并进行代码根因调试分析',
@@ -66,10 +79,41 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   '/summarize': '/summarize 提取当前对话关键摘要并归档',
   '/rules': '/rules 查看或编辑当前项目的 AI 行为准则 (.cursorrules)',
   '/shell': '/shell 在沙箱环境中执行终端指令',
-  '/exit': '/exit 退出并关闭当前交互式会话',
-  '/quit': '/quit 退出当前程序',
+  '/docs': '/docs 检索并解析第三方官方技术文档库',
+  '/composer': '/composer 打开全项目多文件协同编辑模式',
 
-  // === 5. Modern Frontend & Scaffolding (Create-Vite, Next, Vue, React, Bun) ===
+  // === 5. OpenCode & Hermes All Commands (Mined from Source) ===
+  '/editor': '/editor 打开外部系统编辑器编辑提示词',
+  '/session': '/session 管理、切换或列出历史工作区会话',
+  '/switch': '/switch 快速切换当前工作目录与分支',
+  '/attach': '/attach 接入正在运行的后台任务或服务',
+  '/history': '/history 查看与检索历史指令执行流水线',
+  '/prune': '/prune 清理过期无用的临时缓存与会话数据',
+
+  // === 6. Standard Menus & Natural Language Descriptions ===
+  'switch to Plan mode': '切换到规划模式 (Plan Mode)',
+  'set or view the goal for a long-running task': '设置或查看长时间运行任务的目标',
+  'view and switch between all active agent': '查看并在所有活跃的 Agent 会话间切换',
+  'sessions': '会话列表',
+  'start a side conversation in an ephemeral': '在临时分支中开启副对话',
+  'fork': '派生分支',
+  'copy the last response, code block, or quote': '复制最新回复、代码块或引用',
+  'export the conversation as markdown': '将对话导出为 Markdown 文档',
+  'toggle raw scrollback mode for copy-friendly': '切换便于复制的原生纯文本回滚模式',
+  'terminal selection': '终端选区',
+  'show git diff (including untracked files)': '查看 Git 变更对比 (含未跟踪文件)',
+  'list available skills or ask Codex to use one': '列出可用技能库或指示 Codex 调度指定技能',
+  'to change': '以切换',
+  'Tip: New Build faster with Codex.': '提示：使用 Codex 助您更高效地构建项目。',
+  'Tip: Use /skills to list available skills or ask Codex to': '提示：使用 /skills 列出可用技能或让 Codex 调度技能。',
+  'Ask Codex to do anything': '输入指令，让 Codex 为您完成任何开发任务',
+  'Context 0% used': '上下文已使用 0%',
+  'Please select an option': '请选择一个选项',
+  'Please select your preferred framework': '请选择您偏好的前端框架',
+  'Applying patch to...': '正在将 AI 生成的代码补丁应用到文件...',
+  'Reject change [y/n/e]?': '是否拒绝此代码更改 [y(是)/n(否)/e(手动编辑)]?',
+
+  // === 7. Modern Scaffolding & Frameworks (Next, Vite, Bun, Vue, React) ===
   '? Project name:': '? 项目名称：',
   '? Select a framework:': '? 请选择前端框架：',
   '? Select a variant:': '? 请选择开发语言变体 (TypeScript / JavaScript)：',
@@ -110,7 +154,7 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'press o to open in browser': '按 o 在默认浏览器中打开',
   'press c to clear console': '按 c 清空控制台屏幕',
 
-  // === 6. Git Version Control System ===
+  // === 8. Git & Linux System ===
   'On branch main': '位于分支 main',
   'On branch master': '位于分支 master',
   'Your branch is up to date with': '您的分支已与远程分支保持最新',
@@ -132,19 +176,6 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'rebase in progress; onto': '正在进行变基操作 (Rebase)；目标提交为',
   'all conflicts fixed: run "git rebase --continue"': '所有冲突已解决：请执行 "git rebase --continue" 继续',
   'git push --set-upstream origin': '请使用 git push --set-upstream origin 建立上游关联',
-
-  // === 7. Rust Compiler & Toolchain ===
-  'borrow of moved value': '借用了已被移动所有权的值 (所有权冲突)',
-  'cannot borrow as mutable more than once at a time': '同一时间不能对同一变量进行多次可变借用',
-  'lifetime may not live long enough': '生命周期可能不够长 (变量存活期超出预期)',
-  'consider cloning the value if the performance cost is acceptable': '建议：若性能开销可接受，可考虑使用 .clone() 复制该值',
-  'consider borrowing here': '建议：在此处使用引用 (&) 进行借用',
-  'cargo clippy --fix': '自动应用 Clippy 建议的代码优化补丁',
-
-  // === 8. Python, Docker, Linux Core ===
-  'Application startup complete.': '应用程序启动完成，已进入就绪监听状态',
-  'Waiting for application shutdown.': '正在等待应用程序安全关闭并释放连接池...',
-  'RuntimeError: Event loop is closed': '运行时错误：AsyncIO 异步事件循环已提前关闭',
   'Permission denied': '权限被拒绝 (请检查文件读写执行权限或使用 sudo/su)',
   'No such file or directory': '没有该文件或目录 (请检查路径拼写)',
   'Command not found': '未找到该命令 (请检查拼写或使用 apt install 安装)',
@@ -155,7 +186,7 @@ export const DEV_TOOL_EXACT_DICT: Record<string, string> = {
   'Too many open files': '打开的文件句柄数已达系统上限 (ulimit)',
   'Name or service not known': '域名解析失败或 DNS 服务不可达',
   'Temporary failure in name resolution': 'DNS 域名解析暂时性失败 (请检查 /etc/resolv.conf)',
-  'No route to host': '无通往目标主机的网络路由 (对端离线或防火墙阻断)',
+  'No route to host': '无通往目标主机的网络路由 (对端离线或防火墙阻断)'
 };
 
 /** Dynamic Template RegEx Replacers */
