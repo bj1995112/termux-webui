@@ -143,9 +143,12 @@ async function translateWithYoudaoMobile(text: string): Promise<{ translated: st
 
   if (!res.ok) throw new Error(`Youdao Mobile returned HTTP ${res.status}`);
   const html = await res.text();
-  const match = /<ul id="translateResult">[\s\S]*?<li>([\s\S]*?)<\/li>/.exec(html);
-  if (match && match[1]?.trim()) {
-    return { translated: match[1].trim(), fromLang: 'auto' };
+  const match = /<ul id="translateResult">([\s\S]*?)<\/ul>/.exec(html);
+  if (match) {
+    const items = [...match[1].matchAll(/<li>([\s\S]*?)<\/li>/g)].map((m) => m[1].trim());
+    if (items.length > 0) {
+      return { translated: items.join('\n'), fromLang: 'auto' };
+    }
   }
   throw new Error('Youdao Mobile did not match result');
 }

@@ -7,17 +7,18 @@ interface Props {
   onClose: () => void;
 }
 
-interface TranslatedLine {
-  lineIndex: number;
-  original: string;
-  translated: string;
+interface BlockTranslation {
+  id: number;
+  originalLines: string[];
+  translatedText: string;
   loading: boolean;
 }
 
 export default function TranslationOverlay({ term, onClose }: Props) {
-  const [lines, setLines] = useState<TranslatedLine[]>([]);
-  const [expandedLine, setExpandedLine] = useState<number | null>(null);
+  const [blocks, setBlocks] = useState<BlockTranslation[]>([]);
+  const [viewMode, setViewMode] = useState<'bilingual' | 'replace'>('bilingual');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
   const translateText = useDeck((s) => s.translateText);
   const fontSize = useDeck((s) => s.fontSize);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -29,42 +30,62 @@ export default function TranslationOverlay({ term, onClose }: Props) {
     const buf = term.buffer.active;
     const vy = buf.viewportY || 0;
     const rowCount = term.rows;
-    const rawLines: { index: number; text: string }[] = [];
+
+    // 1. Extract non-empty lines and group them into logical paragraph blocks
+    const paragraphBlocks: { id: number; lines: string[] }[] = [];
+    let currentBlock: string[] = [];
+    let blockId = 0;
 
     for (let r = 0; r < rowCount; r++) {
       const line = buf.getLine(vy + r);
       const str = line ? line.translateToString(true) : '';
-      rawLines.push({ index: r, text: str });
+      if (!str.trim()) {
+        if (currentBlock.length > 0) {
+          paragraphBlocks.push({ id: blockId++, lines: currentBlock });
+          currentBlock = [];
+        }
+      } else {
+        currentBlock.push(str);
+      }
+    }
+    if (currentBlock.length > 0) {
+      paragraphBlocks.push({ id: blockId++, lines: currentBlock });
     }
 
-    // Initialize state with original text
-    const initialLines: TranslatedLine[] = rawLines.map((l) => ({
-      lineIndex: l.index,
-      original: l.text,
-      translated: l.text,
-      loading: Boolean(l.text.trim()),
-    }));
-    setLines(initialLines);
+    if (paragraphBlocks.length === 0) {
+      setBlocks([]);
+      setIsRefreshing(false);
+      return;
+    }
 
-    // Group non-empty consecutive lines for contextual translation
-    const promises = rawLines.map(async (l) => {
-      const trimmed = l.text.trim();
-      if (!trimmed) {
-        return { index: l.index, translated: l.text };
+    // Initialize state
+    setBlocks(
+      paragraphBlocks.map((b) => ({
+        id: b.id,
+        originalLines: b.lines,
+        translatedText: b.lines.join('\n'),
+        loading: true,
+      })),
+    );
+
+    // 2. Perform batched contextual translation (1 request per paragraph or combined)
+    const promises = paragraphBlocks.map(async (b) => {
+      const combined = b.lines.join('\n');
+      try {
+        const translated = await translateText(combined);
+        return { id: b.id, translated };
+      } catch {
+        return { id: b.id, translated: combined };
       }
-      const tr = await translateText(trimmed);
-      // Preserve leading whitespace indentation
-      const leadingSpaces = l.text.match(/^\s*/)?.[0] || '';
-      return { index: l.index, translated: leadingSpaces + tr };
     });
 
     const results = await Promise.all(promises);
 
-    setLines((prev) =>
+    setBlocks((prev) =>
       prev.map((item) => {
-        const match = results.find((r) => r.index === item.lineIndex);
+        const match = results.find((r) => r.id === item.id);
         return match
-          ? { ...item, translated: match.translated, loading: false }
+          ? { ...item, translatedText: match.translated, loading: false }
           : { ...item, loading: false };
       }),
     );
@@ -81,80 +102,92 @@ export default function TranslationOverlay({ term, onClose }: Props) {
     <div
       ref={overlayRef}
       style={{ fontSize: `${fontSize}px` }}
-      className="absolute inset-0 z-30 flex flex-col overflow-hidden bg-panel/90 backdrop-blur-md font-mono leading-[1.25] text-text select-text transition-opacity duration-200"
+      className="absolute inset-0 z-30 flex flex-col overflow-hidden bg-panel/92 backdrop-blur-md font-mono leading-[1.35] text-text select-text transition-opacity duration-150"
     >
-      {/* Top Floating Control Capsule */}
-      <div className="sticky top-2 z-40 mx-auto flex items-center gap-2 rounded-xl border border-accent/40 bg-panel2/95 px-3 py-1.5 text-xs shadow-2xl backdrop-blur-md animate-in slide-in-from-top-2">
-        <div className="flex items-center gap-1.5">
+      {/* Ultra-compact Top Floating Control Bar */}
+      <div className="sticky top-1.5 z-40 mx-auto flex items-center gap-1.5 rounded-full border border-accent/40 bg-panel2/95 px-3 py-1 text-xs shadow-2xl backdrop-blur-md">
+        <div className="flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded-full bg-accent animate-pulse" />
-          <span className="font-bold text-accent">🌐 终端原位翻译 ({fontSize}px)</span>
+          <span className="font-bold text-accent text-[11px]">🌐 原位翻译</span>
         </div>
+
         <div className="h-3 w-px bg-border/60 mx-1" />
+
+        {/* View Mode Toggle: Bilingual / Replace */}
+        <button
+          onClick={() => setViewMode(viewMode === 'bilingual' ? 'replace' : 'bilingual')}
+          className="flex items-center gap-1 rounded-full bg-panel px-2.5 py-0.5 text-[11px] font-medium text-text hover:border-accent border border-border transition-colors"
+          title="切换显示模式"
+        >
+          <span>{viewMode === 'bilingual' ? '📖 双语对照' : '🇨🇳 纯中文'}</span>
+        </button>
+
         <button
           onClick={() => void captureAndTranslate()}
           disabled={isRefreshing}
-          className="flex items-center gap-1 rounded bg-panel px-2 py-0.5 text-[11px] text-muted hover:text-text active:scale-95 disabled:opacity-50"
+          className="flex items-center gap-0.5 rounded-full bg-panel px-2 py-0.5 text-[11px] text-muted hover:text-text active:scale-95 disabled:opacity-50 border border-border"
           title="重新抓取当前视口并翻译"
         >
           <span>{isRefreshing ? '⏳' : '🔄'}</span>
-          <span>{isRefreshing ? '翻译中...' : '刷新'}</span>
+          <span>{isRefreshing ? '翻译中' : '刷新'}</span>
         </button>
+
         <button
           onClick={onClose}
-          className="rounded p-1 text-muted hover:text-red-400 active:scale-95 ml-1"
+          className="flex h-5 w-5 items-center justify-center rounded-full text-muted hover:bg-red-500/20 hover:text-red-400 active:scale-95 ml-0.5"
           title="切回原生终端"
         >
           ✕
         </button>
       </div>
 
-      {/* 1:1 In-Place Rendered Lines Viewport */}
-      <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0 text-left">
-        {lines.map((l) => {
-          const isBlank = !l.original.trim();
-          const isExpanded = expandedLine === l.lineIndex;
-
-          return (
+      {/* Paragraph Rendered Stream */}
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3 text-left">
+        {blocks.length === 0 ? (
+          <div className="flex h-full items-center justify-center text-xs text-muted">
+            <p>当前视口无输出内容</p>
+          </div>
+        ) : (
+          blocks.map((b) => (
             <div
-              key={l.lineIndex}
-              onClick={() => setExpandedLine(isExpanded ? null : l.lineIndex)}
-              style={{ minHeight: `${Math.round(fontSize * 1.25)}px` }}
-              className={`group relative whitespace-pre-wrap break-words rounded px-1.5 transition-colors cursor-pointer ${
-                isBlank ? 'opacity-20' : 'hover:bg-accent/10 active:bg-accent/20'
-              } ${isExpanded ? 'bg-panel2/90 ring-1 ring-accent/40' : ''}`}
+              key={b.id}
+              className="group rounded-xl border border-border/50 bg-panel2/40 p-2.5 shadow-sm transition-all hover:border-accent/40"
             >
-              {/* Translated Text (Default In-Place) */}
-              <div className="flex items-start">
-                <span className="flex-1 text-text leading-tight">
-                  {l.translated}
-                </span>
-                {l.loading && (
-                  <span className="ml-2 text-[10px] text-accent animate-pulse">
-                    ...
-                  </span>
-                )}
-              </div>
+              {/* Mode 1: Bilingual (Original English on top, Chinese translation beneath) */}
+              {viewMode === 'bilingual' ? (
+                <div className="space-y-1.5">
+                  {/* Original Terminal Text */}
+                  <div className="whitespace-pre-wrap break-words font-mono text-muted/90 opacity-80 select-text">
+                    {b.originalLines.join('\n')}
+                  </div>
 
-              {/* Expanded In-Place Bilingual Card */}
-              {isExpanded && !isBlank && (
-                <div className="my-1.5 rounded-lg border border-border/80 bg-panel p-2 text-xs shadow-lg space-y-1.5 select-text">
-                  <div>
-                    <span className="text-[10px] font-bold text-muted block">
-                      🇺🇸 原文 (English):
+                  {/* Translated Text Block */}
+                  <div className="whitespace-pre-wrap break-words font-sans text-text font-medium bg-accent/10 border border-accent/20 rounded-lg p-2 select-text">
+                    <span className="text-[10px] font-bold text-accent block mb-0.5">
+                      🇨🇳 译文：
                     </span>
-                    <p className="font-mono text-muted" style={{ fontSize: `${fontSize}px` }}>{l.original}</p>
+                    {b.translatedText}
+                    {b.loading && (
+                      <span className="ml-2 text-[11px] text-accent animate-pulse">
+                        (翻译中...)
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-accent block">
-                      🇨🇳 译文 (Chinese):
+                </div>
+              ) : (
+                /* Mode 2: In-place Pure Translated Text */
+                <div className="whitespace-pre-wrap break-words font-sans text-text font-medium select-text">
+                  {b.translatedText}
+                  {b.loading && (
+                    <span className="ml-2 text-[11px] text-accent animate-pulse">
+                      ...
                     </span>
-                    <p className="font-mono text-text" style={{ fontSize: `${fontSize}px` }}>{l.translated}</p>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
-          );
-        })}
+          ))
+        )}
       </div>
     </div>
   );
