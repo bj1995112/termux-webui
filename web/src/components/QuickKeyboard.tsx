@@ -162,6 +162,7 @@ export default function QuickKeyboard({
   onHide: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const keyboardRef = useRef<HTMLDivElement>(null);
   const pointerRef = useRef<{ id: number; x: number; y: number; item: KeyDef; swiped: boolean } | null>(null);
   const [page, setPage] = useState(0);
   const [mods, setMods] = useState({ ctrl: false, alt: false, shift: false });
@@ -186,6 +187,29 @@ export default function QuickKeyboard({
     if (el) el.scrollLeft = el.clientWidth;
     setPage(0);
   }, [layoutMode]);
+
+  // Keep only the keyboard dock aware of the browser visual viewport.
+  // This never resizes xterm or changes its input focus.
+  useEffect(() => {
+    const el = keyboardRef.current;
+    const vv = window.visualViewport;
+    if (!el || !vv) return;
+
+    const updateDock = () => {
+      const overlap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      el.style.bottom = `${overlap}px`;
+    };
+
+    updateDock();
+    vv.addEventListener("resize", updateDock);
+    vv.addEventListener("scroll", updateDock);
+    window.addEventListener("orientationchange", updateDock);
+    return () => {
+      vv.removeEventListener("resize", updateDock);
+      vv.removeEventListener("scroll", updateDock);
+      window.removeEventListener("orientationchange", updateDock);
+    };
+  }, []);
 
   const toggleLayoutMode = useCallback(() => {
     const next = layoutMode === "2row" ? "3row" : "2row";
@@ -313,145 +337,18 @@ export default function QuickKeyboard({
   );
 
   return (
-    <div className="select-none border-t border-border bg-panel pb-[env(safe-area-inset-bottom)]">
-      {/* Top Controls Bar */}
-      <div className="flex items-center gap-2 px-2 py-1.5 border-b border-border/40 text-xs">
-        {/* Page Dots Indicator */}
-        <div className="flex gap-1.5 items-center">
-          {activePages.map((p, i) => (
-            <button
-              key={p.id}
-              onClick={() => gotoPage(i)}
-              aria-label={p.label}
-              className={`h-2 w-2 rounded-full transition-colors ${i === page ? "bg-accent" : "bg-border"}`}
-            />
-          ))}
+    <div
+      ref={keyboardRef}
+      className="fixed left-0 right-0 z-50 select-none border-t border-border bg-panel"
+      style={{ bottom: "0px", paddingBottom: "0px" }}
+    >
+      <div className="flex h-[72px] w-full flex-col gap-1 p-1">
+        <div className="grid min-h-0 flex-1 grid-cols-7 gap-1">
+          {TERMUX_ROW1.map(renderKey)}
         </div>
-
-        {/* Current Page Label */}
-        <span className="text-xs font-semibold text-text">{activePages[page]?.label}</span>
-
-        {/* Action Controls */}
-        <div className="ml-auto flex items-center gap-1.5">
-          {/* Layout Mode Toggle (2行 / 3行) */}
-          <button
-            onClick={toggleLayoutMode}
-            title={layoutMode === "2row" ? "当前为2行模式，点击切换3行经典大键盘" : "当前为3行大键盘，点击切换2行黄金键盘"}
-            className="rounded border border-accent/40 bg-accent/15 px-2 py-0.5 text-xs font-semibold text-accent active:bg-accent active:text-white transition-colors"
-          >
-            {layoutMode === "2row" ? "⇋ 2行" : "⇋ 3行"}
-          </button>
-
-          {/* Follow Output Switch */}
-          <button
-            onClick={() => toggleFollowOutput()}
-            title={followOutput ? "跟随输出:新内容自动滚到底部" : "自由滑动:输出不拉动画面"}
-            className={`rounded border px-1.5 py-0.5 text-xs ${
-              followOutput ? "border-accent text-accent" : "border-border text-muted"
-            }`}
-          >
-            {followOutput ? "📌跟随" : "📍自由"}
-          </button>
-
-          {/* Suppress Soft Keyboard Switch */}
-          <button
-            onClick={() => toggleSuppressKeyboard()}
-            title={suppressKeyboard ? "已屏蔽系统键盘,点击恢复" : "点击屏蔽系统键盘"}
-            className={`rounded border px-1.5 py-0.5 text-xs ${
-              suppressKeyboard ? "border-accent text-accent" : "border-border text-muted"
-            }`}
-          >
-            {suppressKeyboard ? "⌨︎屏蔽" : "⌨︎正常"}
-          </button>
-
-          {/* Hide Keybar */}
-          <button onClick={onHide} className="rounded border border-border px-2 py-0.5 text-xs text-muted active:text-text">
-            ∨ 收起
-          </button>
+        <div className="grid min-h-0 flex-1 grid-cols-7 gap-1">
+          {TERMUX_ROW2.map(renderKey)}
         </div>
-      </div>
-
-      {/* Main Pages Canvas */}
-      <div
-        ref={scrollRef}
-        className="mk-pages flex overflow-x-auto no-scrollbar"
-        style={{
-          height: layoutMode === "2row" ? "92px" : "156px",
-          touchAction: "pan-x",
-          scrollSnapType: "x mandatory",
-        }}
-        onScroll={handleScroll}
-      >
-        {displayPages.map((p, di) => (
-          <div
-            key={`${p.id}-${di}`}
-            className="h-full w-full flex-shrink-0 px-1.5 py-1"
-            style={{ scrollSnapAlign: "start", scrollSnapStop: "always" }}
-          >
-            {layoutMode === "2row" ? (
-              p.id === "core" ? (
-                <div className="flex h-full flex-col gap-1">
-                  <div className="grid flex-1 grid-cols-8 gap-1">{TWO_ROW_CORE_R1.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-8 gap-1">{TWO_ROW_CORE_R2.map(renderKey)}</div>
-                </div>
-              ) : p.id === "agent" ? (
-                <div className="flex h-full flex-col gap-1">
-                  <div className="grid flex-1 grid-cols-5 gap-1">{TWO_ROW_AGENT_R1.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-6 gap-1">{TWO_ROW_AGENT_R2.map(renderKey)}</div>
-                </div>
-              ) : p.id === "symbols" ? (
-                <div className="flex h-full flex-col gap-1">
-                  <div className="grid flex-1 grid-cols-8 gap-1">{TWO_ROW_SYM_R1.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-8 gap-1">{TWO_ROW_SYM_R2.map(renderKey)}</div>
-                </div>
-              ) : (
-                <div className="flex h-full flex-col gap-1">
-                  <div className="grid flex-1 grid-cols-6 gap-1">{TWO_ROW_FN_R1.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-6 gap-1">{TWO_ROW_FN_R2.map(renderKey)}</div>
-                </div>
-              )
-            ) : (
-              p.id === "core" ? (
-                <div className="flex h-full flex-col gap-1">
-                  <div className="grid flex-1 grid-cols-6 gap-1">{TOP_KEYS.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-7 gap-1">{TERMUX_ROW1.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-7 gap-1">{TERMUX_ROW2.map(renderKey)}</div>
-                </div>
-              ) : p.id === "agent" ? (
-                <div className="flex h-full flex-col gap-1">
-                  <div className="grid flex-1 grid-cols-6 gap-1">{AGENT_ROW1.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-6 gap-1">{AGENT_ROW2.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-6 gap-1">{AGENT_ROW3.map(renderKey)}</div>
-                </div>
-              ) : p.id === "edit" ? (
-                <div className="flex h-full flex-col gap-1">
-                  <div className="grid flex-1 grid-cols-4 gap-1">{EDIT_KEYS_ROW1.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-4 gap-1">{EDIT_KEYS_ROW2.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-4 gap-1">
-                    <ActionButton label="复制选中" onClick={copySelection} />
-                    <ActionButton label="粘贴" onClick={() => void pasteClipboard()} />
-                    <ActionButton label="全选" onClick={selectAll} />
-                    <ActionButton label="软键盘 (ABC)" onClick={focusHelperTextarea} />
-                  </div>
-                </div>
-              ) : p.id === "symbols" ? (
-                <div className="grid h-full grid-cols-8 grid-rows-4 gap-1">{SYMBOL_KEYS.map(renderKey)}</div>
-              ) : (
-                <div className="flex h-full flex-col gap-1">
-                  <div className="grid flex-1 grid-cols-4 gap-1">{FN_ROW1.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-4 gap-1">{FN_ROW2.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-4 gap-1">{FN_ROW3.map(renderKey)}</div>
-                  <div className="grid flex-1 grid-cols-4 gap-1">
-                    {renderKey(key("插入", "\x1b[2~", "Ins"))}
-                    {renderKey(key("暂停", "\x1a", "Pause"))}
-                    {renderKey(key("重置", "\x1bc", "Reset"))}
-                    <ActionButton label="收起" onClick={onHide} />
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-        ))}
       </div>
     </div>
   );

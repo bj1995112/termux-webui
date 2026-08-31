@@ -339,8 +339,9 @@ export const useDeck = create<DeckState>((set, get) => {
         body: JSON.stringify({ kind, cwd, args, env }),
       });
       if (!res.ok) {
-        get().showToast('创建会话失败', 'error');
-        throw new Error('create failed');
+        const data = await res.json().catch(() => null);
+        get().showToast(data?.error || '创建会话失败', 'error');
+        throw new Error(data?.error || 'create failed');
       }
       const info: SessionInfo = await res.json();
       localStorage.setItem('twui.activeId', info.id);
@@ -356,8 +357,9 @@ export const useDeck = create<DeckState>((set, get) => {
         body: JSON.stringify({ cli: conv.cli, id: conv.id, cwd: conv.cwd }),
       });
       if (!res.ok) {
-        get().showToast('恢复会话失败', 'error');
-        throw new Error('resume failed');
+        const data = await res.json().catch(() => null);
+        get().showToast(data?.error || '恢复会话失败', 'error');
+        throw new Error(data?.error || 'resume failed');
       }
       const info: SessionInfo = await res.json();
       localStorage.setItem('twui.activeId', info.id);

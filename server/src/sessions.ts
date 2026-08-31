@@ -37,6 +37,7 @@ export class SessionManager {
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       LANG: process.env.LANG || 'C.UTF-8',
+      LOCAL_8317_API_KEY: extraEnv?.LOCAL_8317_API_KEY || process.env.LOCAL_8317_API_KEY || '',
     };
     const pty = spawn(file, args, {
       name: 'xterm-256color',

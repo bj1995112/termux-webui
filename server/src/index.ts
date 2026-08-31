@@ -106,7 +106,12 @@ app.post('/api/sessions', async (c) => {
         )
       : undefined;
 
-  return c.json(manager.create(kind.data, body?.cwd, args, env), 201);
+  try {
+    return c.json(manager.create(kind.data, body?.cwd, args, env), 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return c.json({ error: message, code: 'CLI_LAUNCH_FAILED' }, 422);
+  }
 });
 
 app.post('/api/sessions/resume', async (c) => {
@@ -128,7 +133,12 @@ app.post('/api/sessions/resume', async (c) => {
     args = ['-s', convId];
   }
 
-  return c.json(manager.create(cli, body.cwd, args), 201);
+  try {
+    return c.json(manager.create(cli, body.cwd, args), 201);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return c.json({ error: message, code: 'CLI_LAUNCH_FAILED' }, 422);
+  }
 });
 
 app.post('/api/sessions/:id/restart', (c) => {
