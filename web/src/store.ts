@@ -214,19 +214,17 @@ export const useDeck = create<DeckState>((set, get) => {
     setTerminalPromptTheme: (value) => {
       localStorage.setItem('twui.promptTheme', value);
       set({ terminalPromptTheme: value });
-      for (const session of get().sessions) {
-        if (session.kind === 'shell' && session.status === 'running') {
-          deckSocket.send({ type: 'promptTheme', sessionId: session.id, theme: value, color: get().terminalPromptColor });
-        }
+      const session = get().sessions.find((item) => item.id === get().activeId);
+      if (session?.kind === 'shell' && session.status === 'running') {
+        deckSocket.send({ type: 'promptTheme', sessionId: session.id, theme: value, color: get().terminalPromptColor });
       }
     },
     setTerminalPromptColor: (value) => {
       localStorage.setItem('twui.promptColor', value);
       set({ terminalPromptColor: value });
-      for (const session of get().sessions) {
-        if (session.kind === 'shell' && session.status === 'running') {
-          deckSocket.send({ type: 'promptTheme', sessionId: session.id, theme: get().terminalPromptTheme, color: value });
-        }
+      const session = get().sessions.find((item) => item.id === get().activeId);
+      if (session?.kind === 'shell' && session.status === 'running') {
+        deckSocket.send({ type: 'promptTheme', sessionId: session.id, theme: get().terminalPromptTheme, color: value });
       }
     },
 

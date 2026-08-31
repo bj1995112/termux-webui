@@ -349,7 +349,7 @@ function handleClient(socket: HeartbeatWebSocket, raw: string) {
       manager.resize(msg.sessionId, msg.cols, msg.rows);
       break;
     case 'promptTheme':
-      manager.setPromptTheme(msg.theme, msg.color);
+      manager.setPromptTheme(msg.sessionId, msg.theme, msg.color);
       break;
   }
 }

@@ -110,27 +110,25 @@ export class SessionManager {
     });
   }
 
-  setPromptTheme(theme: string, color = 'cyan'): boolean {
+  setPromptTheme(sessionId: string, theme: string, color = 'cyan'): boolean {
     const allowed = new Set(['arrow','powerline','p10k','rainbow','tokyo','dracula','cyber','hud','double','minimal']);
     if (!allowed.has(theme)) return false;
     mkdirSync(path.dirname(PROMPT_CONFIG), { recursive: true });
     const allowedColors = new Set(['cyan','blue','purple','pink','green','yellow','orange','red','white']);
     const safeColor = allowedColors.has(color) ? color : 'cyan';
     writeFileSync(PROMPT_CONFIG, `theme=${theme}\ncolor=${safeColor}\n`, { mode: 0o600 });
-    let changed = false;
-    for (const session of this.sessions.values()) {
-      if (session.kind !== 'shell' || !session.pty) continue;
-      try {
-        // Readline consumes this private sequence via a binding installed by
-        // prompt.sh. This updates PS1 and redraws immediately without entering
-        // a shell command or changing the user's current READLINE_LINE.
-        session.pty.write('\x1b[99~');
-        changed = true;
-      } catch {
-        // Shell may have exited between lookup and signal.
-      }
+    const session = this.sessions.get(sessionId);
+    if (!session || session.kind !== 'shell' || !session.pty) return false;
+    try {
+      // Readline consumes this private sequence via a binding installed by
+      // prompt.sh. This updates PS1 and redraws immediately without entering
+      // a shell command or changing the user's current READLINE_LINE.
+      session.pty.write('\x1b[99~');
+      return true;
+    } catch {
+      // Shell may have exited between lookup and signal.
+      return false;
     }
-    return changed;
   }
 
   write(id: string, data: string): boolean {
