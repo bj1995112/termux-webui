@@ -24,7 +24,6 @@ export default function App() {
   const showTranslation = useDeck((s) => s.showTranslation);
   const toggleTranslation = useDeck((s) => s.toggleTranslation);
   const [showNew, setShowNew] = useState(false);
-  const [showCommandStudio, setShowCommandStudio] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
 
@@ -85,15 +84,7 @@ export default function App() {
 
         {/* Right Actions */}
         <div className="ml-auto flex items-center gap-1.5">
-          {/* Quick Command Studio Direct Button */}
-          <button
-            onClick={() => setShowCommandStudio(true)}
-            className="flex items-center gap-1 rounded-xl border border-accent/40 bg-accent/15 px-2.5 py-1 text-xs font-semibold text-accent shadow-sm active:scale-95 hover:bg-accent/25 transition-all"
-            title="查看全部 AI 斜杠命令中文大百科与源码挖掘器"
-          >
-            <span>🚀</span>
-            <span className="hidden xs:inline">命令工坊</span>
-          </button>
+
 
           <button
             onClick={() => setShowNew(true)}
@@ -151,7 +142,6 @@ export default function App() {
       />
 
       <ConversationPreviewModal />
-      <DictionaryManagerDialog open={showCommandStudio} onClose={() => setShowCommandStudio(false)} />
       <LoginModal />
       <Toast />
     </div>

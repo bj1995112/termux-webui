@@ -10,6 +10,24 @@ interface Props {
   onNewSession: () => void;
 }
 
+interface CustomKeyboardPage {
+  id: string;
+  label: string;
+  keys: { label: string; seq: string }[];
+}
+
+const CUSTOM_KEYBOARD_STORAGE = 'twui.customKeyboardPages';
+const readCustomKeyboardPages = (): CustomKeyboardPage[] => {
+  try {
+    const value = JSON.parse(localStorage.getItem(CUSTOM_KEYBOARD_STORAGE) || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch { return []; }
+};
+const saveCustomKeyboardPages = (pages: CustomKeyboardPage[]) => {
+  localStorage.setItem(CUSTOM_KEYBOARD_STORAGE, JSON.stringify(pages));
+  window.dispatchEvent(new Event('twui-custom-keyboard-pages'));
+};
+
 function pad(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
 }
@@ -124,6 +142,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   const [openTheme, setOpenTheme] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
   const [openDictManager, setOpenDictManager] = useState(false);
+  const [customKeyboardPages, setCustomKeyboardPages] = useState<CustomKeyboardPage[]>(readCustomKeyboardPages);
 
   // History filtering & search
   const [activeCliFilter, setActiveCliFilter] = useState<'all' | CliId>('all');
@@ -615,6 +634,84 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
 
             {openSettings && (
               <div className="border-t border-border/60 p-3 space-y-3 text-xs">
+                {/* 快捷命令页 */}
+                <div className="space-y-2 rounded-lg border border-accent/20 bg-accent/5 p-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-text font-medium block">⌨️ 快捷命令页</span>
+                      <span className="text-[10px] text-muted block">管理键盘第 5 页起的自定义页面；前 4 页固定不变</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const label = window.prompt('新快捷命令页名称', `自定义 ${customKeyboardPages.length + 1}`)?.trim();
+                        if (!label) return;
+                        const pages = [...customKeyboardPages, { id: `custom-${Date.now()}`, label, keys: [] }];
+                        setCustomKeyboardPages(pages);
+                        saveCustomKeyboardPages(pages);
+                      }}
+                      className="rounded-md border border-accent/40 bg-accent/15 px-2 py-1 text-[11px] font-semibold text-accent active:scale-95"
+                    >
+                      ＋ 新增
+                    </button>
+                  </div>
+
+                  {customKeyboardPages.length === 0 ? (
+                    <div className="rounded-md border border-dashed border-border p-2 text-[10px] text-muted text-center">
+                      暂无自定义页。新增后会从键盘第 5 页开始显示。
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {customKeyboardPages.map((page, index) => (
+                        <div key={page.id} className="rounded-md border border-border bg-panel p-2 space-y-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-5 text-center text-[10px] text-muted">{index + 5}</span>
+                            <span className="min-w-0 flex-1 truncate font-medium text-text">{page.label}</span>
+                            <button type="button" onClick={() => {
+                              const label = window.prompt('修改页面名称', page.label)?.trim();
+                              if (!label) return;
+                              const pages = customKeyboardPages.map((p) => p.id === page.id ? { ...p, label } : p);
+                              setCustomKeyboardPages(pages); saveCustomKeyboardPages(pages);
+                            }} className="px-1.5 py-0.5 text-[10px] text-accent">改名</button>
+                            <button type="button" onClick={() => {
+                              if (!window.confirm(`删除“${page.label}”？`)) return;
+                              const pages = customKeyboardPages.filter((p) => p.id !== page.id);
+                              setCustomKeyboardPages(pages); saveCustomKeyboardPages(pages);
+                            }} className="px-1.5 py-0.5 text-[10px] text-red-400">删除</button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1">
+                            {page.keys.map((k, ki) => (
+                              <button key={`${page.id}-${ki}`} type="button" title={k.seq} onClick={() => {
+                                const label = window.prompt('按钮名称', k.label)?.trim();
+                                if (!label) return;
+                                const seq = window.prompt('发送内容（支持\x1b 等终端控制序列）', k.seq);
+                                if (seq === null) return;
+                                const pages = customKeyboardPages.map((p) => p.id === page.id ? { ...p, keys: p.keys.map((x, i) => i === ki ? { label, seq } : x) } : p);
+                                setCustomKeyboardPages(pages); saveCustomKeyboardPages(pages);
+                              }} className="truncate rounded border border-border px-1.5 py-1 text-[10px] text-text text-left">
+                                {k.label}
+                              </button>
+                            ))}
+                          </div>
+                          {page.keys.length < 14 && (
+                            <button type="button" onClick={() => {
+                              const label = window.prompt('按钮名称');
+                              if (!label?.trim()) return;
+                              const seq = window.prompt('发送内容', label);
+                              if (seq === null) return;
+                              const pages = customKeyboardPages.map((p) => p.id === page.id ? { ...p, keys: [...p.keys, { label: label.trim(), seq }] } : p);
+                              setCustomKeyboardPages(pages); saveCustomKeyboardPages(pages);
+                            }} className="w-full rounded border border-dashed border-border px-2 py-1 text-[10px] text-muted hover:text-accent">
+                              ＋ 添加按键（{page.keys.length}/14）
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[9px] leading-relaxed text-muted">自定义页最多 14 个按键，按两行自动排列。左右滑动键盘切页；删除页面不会影响前 4 个固定页面。</p>
+                </div>
+
                 {/* 跟随输出 */}
                 <label className="flex items-center justify-between cursor-pointer">
                   <div>
