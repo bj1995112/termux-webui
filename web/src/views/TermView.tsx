@@ -6,7 +6,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import { deckSocket } from '../lib/ws.js';
 import { useDeck } from '../store.js';
-import { THEMES } from '../theme.js';
+import { getTerminalTheme } from '../terminalTheme.js';
 import { CHINESE_SLASH_CMD_MAP } from '@termux-webui/shared';
 
 /** sessionId → refit function, so tab activation can trigger a clean refit. */
@@ -122,9 +122,12 @@ export default function TermView({ sessionId, active }: Props) {
   const translateText = useDeck((s) => s.translateText);
   const suppressKeyboard = useDeck((s) => s.suppressKeyboard);
   const followOutput = useDeck((s) => s.followOutput);
-  const currentTheme = useDeck((s) => s.currentTheme);
+  const terminalTheme = useDeck((s) => s.terminalTheme);
   const fontSize = useDeck((s) => s.fontSize);
   const setFontSize = useDeck((s) => s.setFontSize);
+  const terminalLineHeight = useDeck((s) => s.terminalLineHeight);
+  const terminalCursorStyle = useDeck((s) => s.terminalCursorStyle);
+  const terminalCursorBlink = useDeck((s) => s.terminalCursorBlink);
   const restartSession = useDeck((s) => s.restartSession);
   const killSession = useDeck((s) => s.killSession);
   const showToast = useDeck((s) => s.showToast);
@@ -143,34 +146,39 @@ export default function TermView({ sessionId, active }: Props) {
   // Update theme dynamically
   useEffect(() => {
     if (termRef.current) {
-      const themeConfig = THEMES[currentTheme] || THEMES['tokyo-night'];
-      termRef.current.options.theme = themeConfig.terminal;
+      const themeConfig = getTerminalTheme(terminalTheme);
+      termRef.current.options.theme = { ...themeConfig.terminal };
+      // Force xterm to repaint the existing buffer immediately.
+      termRef.current.refresh(0, Math.max(0, termRef.current.rows - 1));
     }
-  }, [currentTheme]);
+  }, [terminalTheme]);
 
   // Update font size dynamically on pinch or preference change
   useEffect(() => {
     if (termRef.current) {
       termRef.current.options.fontSize = fontSize;
+      termRef.current.options.lineHeight = terminalLineHeight;
+      termRef.current.options.cursorStyle = terminalCursorStyle;
+      termRef.current.options.cursorBlink = terminalCursorBlink;
       requestAnimationFrame(() => fitFns.get(sessionId)?.());
     }
-  }, [fontSize, sessionId]);
+  }, [fontSize, terminalLineHeight, sessionId]);
 
   // Create terminal instance once per session
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
-    const themeConfig = THEMES[currentTheme] || THEMES['tokyo-night'];
+    const themeConfig = getTerminalTheme(terminalTheme);
     const currentFontSize = useDeck.getState().fontSize || 13;
 
     const term = new Terminal({
       theme: themeConfig.terminal,
       fontFamily: '"JetBrains Mono", "Roboto Mono", "Fira Code", ui-monospace, Menlo, Monaco, monospace',
       fontSize: currentFontSize,
-      lineHeight: 1.25,
-      cursorBlink: true,
-      cursorStyle: 'block',
+      lineHeight: terminalLineHeight,
+      cursorBlink: terminalCursorBlink,
+      cursorStyle: terminalCursorStyle,
       scrollback: 5000,
       allowTransparency: true,
       macOptionIsMeta: true,

@@ -29,6 +29,7 @@ export const ClientMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('attach'), sessionId: z.string() }),
   z.object({ type: z.literal('detach'), sessionId: z.string() }),
   z.object({ type: z.literal('input'), sessionId: z.string(), data: z.string() }),
+  z.object({ type: z.literal('promptTheme'), sessionId: z.string(), theme: z.string(), color: z.string().optional() }),
   z.object({
     type: z.literal('resize'),
     sessionId: z.string(),

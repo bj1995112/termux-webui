@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { IPty, spawn } from 'node-pty';
 import type { CliId, SessionInfo } from '@termux-webui/shared';
 import { commandFor } from './clis.js';
+
+const PROMPT_CONFIG = path.join(homedir(), '.config', 'termux-webui', 'prompt.conf');
 
 export interface Session extends SessionInfo {
   pty?: IPty;
@@ -62,6 +64,7 @@ export class SessionManager {
       this.buffers.set(id, '');
     }
 
+    // Shell PTYs remain native Bash sessions; no prompt injection.
     pty.onData((data) => {
       let buf = (this.buffers.get(id) ?? '') + data;
       if (buf.length > SessionManager.MAX_BUFFER * 1.5) {
@@ -105,6 +108,29 @@ export class SessionManager {
       void _pty;
       return info;
     });
+  }
+
+  setPromptTheme(theme: string, color = 'cyan'): boolean {
+    const allowed = new Set(['arrow','powerline','p10k','rainbow','tokyo','dracula','cyber','hud','double','minimal']);
+    if (!allowed.has(theme)) return false;
+    mkdirSync(path.dirname(PROMPT_CONFIG), { recursive: true });
+    const allowedColors = new Set(['cyan','blue','purple','pink','green','yellow','orange','red','white']);
+    const safeColor = allowedColors.has(color) ? color : 'cyan';
+    writeFileSync(PROMPT_CONFIG, `theme=${theme}\ncolor=${safeColor}\n`, { mode: 0o600 });
+    let changed = false;
+    for (const session of this.sessions.values()) {
+      if (session.kind !== 'shell' || !session.pty) continue;
+      try {
+        // Readline consumes this private sequence via a binding installed by
+        // prompt.sh. This updates PS1 and redraws immediately without entering
+        // a shell command or changing the user's current READLINE_LINE.
+        session.pty.write('\x1b[99~');
+        changed = true;
+      } catch {
+        // Shell may have exited between lookup and signal.
+      }
+    }
+    return changed;
   }
 
   write(id: string, data: string): boolean {

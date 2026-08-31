@@ -9,6 +9,7 @@ import type {
   TranslateResponse,
 } from '@termux-webui/shared';
 import { type ThemeId, applyTheme } from './theme';
+import { getSelectedTerminalThemeId, saveSelectedTerminalTheme, getTerminalTheme } from './terminalTheme';
 import { deckSocket } from './lib/ws';
 import { getCachedTranslation, setCachedTranslation } from './lib/translateCache';
 
@@ -31,9 +32,21 @@ interface DeckState {
   // Theme & Appearance
   currentTheme: ThemeId;
   setTheme: (theme: ThemeId) => void;
+  terminalTheme: string;
+  setTerminalTheme: (theme: string) => void;
   fontSize: number;
   setFontSize: (size: number) => void;
   resetFontSize: () => void;
+  terminalLineHeight: number;
+  setTerminalLineHeight: (value: number) => void;
+  terminalCursorStyle: 'block' | 'underline' | 'bar';
+  setTerminalCursorStyle: (value: 'block' | 'underline' | 'bar') => void;
+  terminalCursorBlink: boolean;
+  setTerminalCursorBlink: (value: boolean) => void;
+  terminalPromptTheme: string;
+  terminalPromptColor: string;
+  setTerminalPromptTheme: (value: string) => void;
+  setTerminalPromptColor: (value: string) => void;
 
   // Translation System (Live Stream & Word Selection)
   translationConfig: TranslationConfig;
@@ -117,11 +130,17 @@ export const useDeck = create<DeckState>((set, get) => {
     token: initialToken,
     isAuthenticated: Boolean(initialToken),
     currentTheme: savedTheme,
+    terminalTheme: getSelectedTerminalThemeId(),
     fontSize: (() => {
       const saved = localStorage.getItem('twui.fontSize');
       const num = saved ? parseInt(saved, 10) : 13;
       return num >= 6 && num <= 36 ? num : 13;
     })(),
+    terminalLineHeight: (() => { const v = parseFloat(localStorage.getItem('twui.terminalLineHeight') || '1.25'); return v >= 1 && v <= 2 ? v : 1.25; })(),
+    terminalCursorStyle: (() => { const v = localStorage.getItem('twui.terminalCursorStyle'); return v === 'underline' || v === 'bar' || v === 'block' ? v : 'block'; })(),
+    terminalCursorBlink: localStorage.getItem('twui.terminalCursorBlink') !== '0',
+    terminalPromptTheme: strPref('twui.promptTheme', 'arrow') || 'arrow',
+    terminalPromptColor: strPref('twui.promptColor', 'cyan') || 'cyan',
     translationConfig: (() => {
       try {
         const saved = localStorage.getItem('twui.transConfig');
@@ -189,6 +208,27 @@ export const useDeck = create<DeckState>((set, get) => {
       set({ fontSize: 13 });
       get().showToast('终端字号已重置为 13px (Termux 默认)', 'info');
     },
+    setTerminalLineHeight: (value) => { const v = Math.min(2, Math.max(1, Math.round(value * 100) / 100)); localStorage.setItem('twui.terminalLineHeight', String(v)); set({ terminalLineHeight: v }); },
+    setTerminalCursorStyle: (value) => { localStorage.setItem('twui.terminalCursorStyle', value); set({ terminalCursorStyle: value }); },
+    setTerminalCursorBlink: (value) => { localStorage.setItem('twui.terminalCursorBlink', value ? '1' : '0'); set({ terminalCursorBlink: value }); },
+    setTerminalPromptTheme: (value) => {
+      localStorage.setItem('twui.promptTheme', value);
+      set({ terminalPromptTheme: value });
+      for (const session of get().sessions) {
+        if (session.kind === 'shell' && session.status === 'running') {
+          deckSocket.send({ type: 'promptTheme', sessionId: session.id, theme: value, color: get().terminalPromptColor });
+        }
+      }
+    },
+    setTerminalPromptColor: (value) => {
+      localStorage.setItem('twui.promptColor', value);
+      set({ terminalPromptColor: value });
+      for (const session of get().sessions) {
+        if (session.kind === 'shell' && session.status === 'running') {
+          deckSocket.send({ type: 'promptTheme', sessionId: session.id, theme: get().terminalPromptTheme, color: value });
+        }
+      }
+    },
 
     showToast: (message, type = 'info') => {
       if (toastTimer) clearTimeout(toastTimer);
@@ -197,6 +237,13 @@ export const useDeck = create<DeckState>((set, get) => {
         set({ toast: null });
         toastTimer = null;
       }, 2500);
+    },
+
+    setTerminalTheme: (theme) => {
+      const config = getTerminalTheme(theme);
+      saveSelectedTerminalTheme(config.id);
+      set({ terminalTheme: config.id });
+      get().showToast(`终端主题: ${config.name}`, 'info');
     },
 
     setTheme: (theme) => {
@@ -336,7 +383,7 @@ export const useDeck = create<DeckState>((set, get) => {
       const res = await authFetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind, cwd, args, env }),
+        body: JSON.stringify({ kind, cwd, args, env: kind === 'shell' ? { ...(env ?? {}), TERMUX_WEBUI: '1' } : env }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);

@@ -2,7 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useDeck } from '../store.js';
 import type { AgentConversation, CliId } from '@termux-webui/shared';
 import { THEMES, type ThemeId } from '../theme.js';
+import { getTerminalThemes, saveCustomTerminalTheme, deleteCustomTerminalTheme, exportTerminalTheme, type TerminalThemeConfig } from '../terminalTheme.js';
 import { DictionaryManagerDialog } from './DictionaryManagerDialog.js';
+import { ONLINE_TERMINAL_THEMES, downloadOnlineTerminalTheme } from '../onlineTerminalThemes.js';
+import { TERMINAL_PROMPT_THEMES, TERMINAL_PROMPT_COLORS } from '../terminalPromptThemes.js';
 
 interface Props {
   open: boolean;
@@ -124,8 +127,20 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   // Auth & Theme & Appearance & Translation
   const currentTheme = useDeck((s) => s.currentTheme);
   const setTheme = useDeck((s) => s.setTheme);
+  const terminalTheme = useDeck((s) => s.terminalTheme);
+  const setTerminalTheme = useDeck((s) => s.setTerminalTheme);
   const fontSize = useDeck((s) => s.fontSize);
   const resetFontSize = useDeck((s) => s.resetFontSize);
+  const terminalLineHeight = useDeck((s) => s.terminalLineHeight);
+  const setTerminalLineHeight = useDeck((s) => s.setTerminalLineHeight);
+  const terminalCursorStyle = useDeck((s) => s.terminalCursorStyle);
+  const setTerminalCursorStyle = useDeck((s) => s.setTerminalCursorStyle);
+  const terminalCursorBlink = useDeck((s) => s.terminalCursorBlink);
+  const setTerminalCursorBlink = useDeck((s) => s.setTerminalCursorBlink);
+  const terminalPromptTheme = useDeck((s) => s.terminalPromptTheme);
+  const setTerminalPromptTheme = useDeck((s) => s.setTerminalPromptTheme);
+  const terminalPromptColor = useDeck((s) => s.terminalPromptColor);
+  const setTerminalPromptColor = useDeck((s) => s.setTerminalPromptColor);
   const translationConfig = useDeck((s) => s.translationConfig);
   const setTranslationConfig = useDeck((s) => s.setTranslationConfig);
   const logout = useDeck((s) => s.logout);
@@ -140,6 +155,8 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
   const [openActive, setOpenActive] = useState(true);
   const [openHistory, setOpenHistory] = useState(false);
   const [openTheme, setOpenTheme] = useState(false);
+  const [openTerminalTheme, setOpenTerminalTheme] = useState(false);
+  const [terminalThemes, setTerminalThemes] = useState<TerminalThemeConfig[]>(getTerminalThemes);
   const [openSettings, setOpenSettings] = useState(false);
   const [openDictManager, setOpenDictManager] = useState(false);
   const [customKeyboardPages, setCustomKeyboardPages] = useState<CustomKeyboardPage[]>(readCustomKeyboardPages);
@@ -156,6 +173,54 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
       void loadHistory();
     }
   }, [open, loadHistory]);
+
+  const refreshTerminalThemes = () => setTerminalThemes(getTerminalThemes());
+  const [onlineDownloading, setOnlineDownloading] = useState<string | null>(null);
+  const [openOnlineThemes, setOpenOnlineThemes] = useState(false);
+  const [onlineThemeQuery, setOnlineThemeQuery] = useState('');
+  const [onlineThemeCategory, setOnlineThemeCategory] = useState<'all' | 'dark' | 'light'>('all');
+  const filteredOnlineThemes = useMemo(() => {
+    const q = onlineThemeQuery.trim().toLowerCase();
+    return ONLINE_TERMINAL_THEMES.filter((meta) => {
+      if (q && !`${meta.name} ${meta.description ?? ''}`.toLowerCase().includes(q)) return false;
+      if (onlineThemeCategory === 'dark' && /light|day|pastel/i.test(meta.name)) return false;
+      if (onlineThemeCategory === 'light' && !/light|day|pastel/i.test(meta.name)) return false;
+      return true;
+    });
+  }, [onlineThemeQuery, onlineThemeCategory]);
+
+  const installOnlineTheme = async (meta: typeof ONLINE_TERMINAL_THEMES[number]) => {
+    if (onlineDownloading) return;
+    setOnlineDownloading(meta.id);
+    try {
+      const theme = await downloadOnlineTerminalTheme(meta);
+      saveCustomTerminalTheme(theme);
+      refreshTerminalThemes();
+      setTerminalTheme(theme.id);
+      showToast(`${meta.name} 已下载并应用`, 'success');
+    } catch (e) {
+      console.error(e);
+      showToast(`${meta.name} 下载失败，请检查网络`, 'error');
+    } finally { setOnlineDownloading(null); }
+  };
+
+  const importTerminalTheme = async (file?: File) => {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as Partial<TerminalThemeConfig>;
+      if (!parsed.name || !parsed.terminal || typeof parsed.terminal.background !== 'string' || typeof parsed.terminal.foreground !== 'string') {
+        throw new Error('invalid theme');
+      }
+      const id = String(parsed.id || `custom-${Date.now()}`).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+      if (!id || terminalThemes.some((t) => t.builtIn && t.id === id)) throw new Error('invalid id');
+      saveCustomTerminalTheme({ id, name: parsed.name, nameEn: parsed.nameEn, badge: parsed.badge || '🎨', description: parsed.description || '用户自定义终端主题', terminal: parsed.terminal, builtIn: false });
+      refreshTerminalThemes();
+      setTerminalTheme(id);
+      showToast('终端主题已导入', 'success');
+    } catch {
+      showToast('主题文件无效，导入失败', 'error');
+    }
+  };
 
   const close = () => {
     onClose();
@@ -562,7 +627,7 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
           </div>
 
           {/* =================================================================== */}
-          {/* 3. 5 大精选大师级主题选择 (Theme Switcher) */}
+          {/* 3. WebUI 主题 */}
           {/* =================================================================== */}
           <div className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
             <button
@@ -618,7 +683,82 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
           </div>
 
           {/* =================================================================== */}
-          {/* 4. 系统与偏好设置 (Settings Accordion) */}
+          {/* 4. 独立终端主题 */}
+          {/* =================================================================== */}
+          <div className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
+            <button onClick={() => setOpenTerminalTheme(!openTerminalTheme)} className="flex w-full items-center justify-between px-3.5 py-2.5 text-left text-xs font-bold text-text hover:bg-panel2/80 active:bg-panel2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">⌨️</span><span>终端主题</span>
+                <span className="rounded-full bg-accent/20 px-1.5 py-0.2 text-[10px] font-semibold text-accent">{terminalThemes.find((t) => t.id === terminalTheme)?.name || 'Termux 经典'}</span>
+              </div>
+              <span className="text-xs text-muted">{openTerminalTheme ? '▾' : '▸'}</span>
+            </button>
+            {openTerminalTheme && (
+              <div className="border-t border-border/60 p-2.5 space-y-2">
+                <div className="grid grid-cols-1 gap-2">
+                  {terminalThemes.map((t) => {
+                    const active = t.id === terminalTheme;
+                    const fg = t.terminal.foreground || '#fff';
+                    const bg = t.terminal.background || '#000';
+                    return (
+                      <div key={t.id} className={`overflow-hidden rounded-xl border transition-all ${active ? 'border-accent ring-1 ring-accent/30' : 'border-border'}`}>
+                        <button type="button" className="block w-full text-left" onClick={() => setTerminalTheme(t.id)}>
+                          <div className="px-2.5 pt-2">
+                            <div className="relative overflow-hidden rounded-lg border border-white/10 px-2.5 py-2 font-mono text-[10px] leading-[1.55]" style={{ background: bg, color: fg }}>
+                              <div><span style={{ color: t.terminal.green }}>$</span> <span>cd ~/AI</span></div>
+                              <div><span style={{ color: t.terminal.cyan }}>~/AI</span> <span style={{ color: t.terminal.blue }}>❯</span> <span>npm run dev</span></div>
+                              <div><span style={{ color: t.terminal.green }}>✓</span> <span>Server started</span> <span style={{ color: t.terminal.yellow }}>:4096</span></div>
+                              <div><span style={{ color: t.terminal.magenta }}>终端主题预览</span> <span style={{ color: t.terminal.red }}>错误</span> <span style={{ color: t.terminal.yellow }}>警告</span></div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 px-2.5 py-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/60 text-sm" style={{ background: bg, color: t.terminal.cursor || fg }}>{t.badge}</span>
+                            <div className="min-w-0 flex-1"><p className="text-[11px] font-bold text-text truncate">{t.name}</p><p className="text-[9px] text-muted truncate">{t.description}</p></div>
+                            {active && <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[9px] font-bold text-accent">✓ 当前</span>}
+                          </div>
+                        </button>
+                        <div className="flex items-center gap-3 border-t border-border/50 px-2.5 py-1.5 text-[9px]">
+                          <span style={{ color: t.terminal.red }}>红</span><span style={{ color: t.terminal.green }}>绿</span><span style={{ color: t.terminal.yellow }}>黄</span><span style={{ color: t.terminal.blue }}>蓝</span><span style={{ color: t.terminal.magenta }}>紫</span><span style={{ color: t.terminal.cyan }}>青</span>
+                          {!t.builtIn && <><button type="button" onClick={() => exportTerminalTheme(t)} className="ml-auto text-accent">导出</button><button type="button" onClick={() => { deleteCustomTerminalTheme(t.id); refreshTerminalThemes(); }} className="text-red-400">删除</button></>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => setOpenOnlineThemes(!openOnlineThemes)} className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 text-left hover:bg-accent/10">
+                  <span className="text-[11px] font-semibold text-accent">在线主题库</span>
+                  <span className="text-[10px] text-muted">{openOnlineThemes ? '收起 ▾' : `${ONLINE_TERMINAL_THEMES.length} 个可下载 ▸`}</span>
+                </button>
+                {openOnlineThemes && (
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-panel/50 p-1.5">
+                    <p className="px-1 py-0.5 text-[9px] leading-4 text-muted">来自 iTerm2 Color Schemes 的 Termux 原生配色，只下载颜色配置，不执行脚本。</p>
+                    <input value={onlineThemeQuery} onChange={(e) => setOnlineThemeQuery(e.target.value)} placeholder="搜索主题名称…" className="w-full rounded-md border border-border bg-panel2 px-2.5 py-1.5 text-[10px] text-text outline-none focus:border-accent" />
+                    <div className="flex gap-1">
+                      {([['all','全部'], ['dark','深色'], ['light','浅色']] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setOnlineThemeCategory(id)} className={`rounded-md px-2 py-1 text-[9px] ${onlineThemeCategory === id ? 'bg-accent/15 text-accent font-semibold' : 'text-muted hover:bg-panel2'}`}>{label}</button>)}
+                      <span className="ml-auto self-center text-[9px] text-muted">{filteredOnlineThemes.length} 个</span>
+                    </div>
+                    {filteredOnlineThemes.map((meta) => {
+
+                      const installed = terminalThemes.some((t) => t.id === `online-${meta.id}`);
+                      const downloading = onlineDownloading === meta.id;
+                      return <div key={meta.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-panel2">
+                        <div className="min-w-0 flex-1"><p className="truncate text-[10px] font-semibold text-text">{meta.name}</p><p className="truncate text-[9px] text-muted">{meta.description}</p></div>
+                        <button type="button" disabled={!!onlineDownloading} onClick={() => void installOnlineTheme(meta)} className="shrink-0 rounded-md border border-accent/40 px-2 py-1 text-[9px] font-semibold text-accent disabled:opacity-50">{downloading ? '下载中…' : installed ? '重新应用' : '下载并应用'}</button>
+                      </div>;
+                    })}
+                  </div>
+                )}
+                <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-accent/40 bg-accent/5 px-3 py-2 text-[11px] font-semibold text-accent hover:bg-accent/10">
+                  ＋ 导入终端主题 JSON
+                  <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { void importTerminalTheme(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+                </label>
+                <p className="text-[9px] leading-4 text-muted">终端主题已与 WebUI 主题分离。现有字体、字号、双指缩放和终端操作保持独立。</p>
+              </div>
+            )}
+          </div>
+
+          {/* =================================================================== */}
+          {/* 5. 系统与偏好设置 (Settings Accordion) */}
           {/* =================================================================== */}
           <div className="rounded-xl border border-border bg-panel2/40 overflow-hidden shadow-sm">
             <button
@@ -739,6 +879,50 @@ export default function Drawer({ open, onClose, onNewSession }: Props) {
                     className="h-4 w-4 accent-accent rounded"
                   />
                 </label>
+
+                {/* 终端外观 */}
+                <div className="space-y-2 rounded-lg border border-border/60 bg-panel/60 p-2.5">
+                  <div>
+                    <span className="text-text font-medium block">终端外观</span>
+                    <span className="text-[10px] text-muted block">独立于 WebUI 主题；适合手机终端阅读</span>
+                  </div>
+                  <div className="space-y-1.5 rounded-md border border-accent/20 bg-accent/5 p-2">
+                    <div>
+                      <span className="text-[10px] text-text font-medium block">命令行样式</span>
+                      <span className="text-[9px] text-muted block">改变 Prompt 本身；命令会自然出现在箭头后面</span>
+                    </div>
+                    <select value={terminalPromptTheme} onChange={(e) => setTerminalPromptTheme(e.target.value)} className="w-full rounded-md border border-border bg-panel2 px-2 py-1.5 text-[10px] text-text">
+                      {TERMINAL_PROMPT_THEMES.map((t) => <option key={t.id} value={t.id}>{t.name} — {t.sample.replace(/\n/g, ' / ')}</option>)}
+                    </select>
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] text-muted">命令行颜色</span>
+                        <span className="text-[9px] font-medium" style={{ color: TERMINAL_PROMPT_COLORS.find((c) => c.id === terminalPromptColor)?.hex || '#00d7ff' }}>{TERMINAL_PROMPT_COLORS.find((c) => c.id === terminalPromptColor)?.name || '青色'}</span>
+                      </div>
+                      <div className="grid grid-cols-9 gap-1">
+                        {TERMINAL_PROMPT_COLORS.map((c) => {
+                          const active = terminalPromptColor === c.id;
+                          return <button key={c.id} type="button" title={c.name} aria-label={`命令行颜色：${c.name}`} onClick={() => setTerminalPromptColor(c.id)} className={`h-6 rounded-md border transition-all ${active ? 'border-white ring-1 ring-accent scale-105' : 'border-border/60'}`} style={{ background: c.hex }} />;
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-muted">光标样式</span>
+                    <select value={terminalCursorStyle} onChange={(e) => setTerminalCursorStyle(e.target.value as 'block' | 'underline' | 'bar')} className="rounded-md border border-border bg-panel2 px-2 py-1 text-[10px] text-text">
+                      <option value="block">方块</option><option value="bar">竖线</option><option value="underline">下划线</option>
+                    </select>
+                  </div>
+                  <label className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted">光标闪烁</span>
+                    <input type="checkbox" checked={terminalCursorBlink} onChange={(e) => setTerminalCursorBlink(e.target.checked)} className="h-4 w-4 accent-accent rounded" />
+                  </label>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between"><span className="text-[10px] text-muted">行距</span><span className="text-[10px] font-mono text-text">{terminalLineHeight.toFixed(2)}</span></div>
+                    <input type="range" min="1" max="2" step="0.05" value={terminalLineHeight} onChange={(e) => setTerminalLineHeight(Number(e.target.value))} className="w-full accent-accent" />
+                  </div>
+                </div>
 
                 {/* 终端字体大小与重置 */}
                 <div className="flex items-center justify-between py-0.5">

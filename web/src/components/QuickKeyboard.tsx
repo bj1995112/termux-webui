@@ -106,26 +106,6 @@ export default function QuickKeyboard({
     setPage(0);
   }, [pages.length]);
 
-  // Only the keyboard dock follows the browser visual viewport. xterm itself
-  // remains completely independent so keyboard resize cannot disturb rendering.
-  useEffect(() => {
-    const el = keyboardRef.current;
-    const vv = window.visualViewport;
-    if (!el || !vv) return;
-    const updateDock = () => {
-      const overlap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      el.style.bottom = `${overlap}px`;
-    };
-    updateDock();
-    vv.addEventListener("resize", updateDock);
-    vv.addEventListener("scroll", updateDock);
-    window.addEventListener("orientationchange", updateDock);
-    return () => {
-      vv.removeEventListener("resize", updateDock);
-      vv.removeEventListener("scroll", updateDock);
-      window.removeEventListener("orientationchange", updateDock);
-    };
-  }, []);
 
   const send = useCallback((seq: string) => {
     deckSocket.send({ type: "input", sessionId, data: seq });
@@ -185,6 +165,7 @@ export default function QuickKeyboard({
           sendKey(k);
         }
       }}
+      onMouseDown={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
     >
       <span className={mods[k.label.toLowerCase() as "ctrl" | "alt" | "shift"] ? "font-bold text-accent" : ""}>{k.label}</span>
@@ -195,8 +176,8 @@ export default function QuickKeyboard({
   return (
     <div
       ref={keyboardRef}
-      className="fixed left-0 right-0 z-50 select-none border-t border-border bg-panel"
-      style={{ bottom: "0px", paddingBottom: "0px" }}
+      className="relative shrink-0 w-full select-none border-t border-border bg-panel"
+      style={{ paddingBottom: "0px" }}
     >
       <div
         ref={scrollRef}

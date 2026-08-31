@@ -26,6 +26,25 @@ export default function App() {
   const [showNew, setShowNew] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [wsStatus, setWsStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const keyboardOpen = vv.height < window.innerHeight - 80;
+      setViewportHeight(keyboardOpen ? vv.height : null);
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    window.addEventListener('orientationchange', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      window.removeEventListener('orientationchange', update);
+    };
+  }, []);
 
   useEffect(() => deckSocket.onStatus(setWsStatus), []);
 
@@ -44,7 +63,7 @@ export default function App() {
   const active = sessions.find((s) => s.id === activeId) ?? null;
 
   return (
-    <div className="flex h-full flex-col bg-panel text-text selection:bg-accent/30 selection:text-white">
+    <div className="flex h-full min-h-0 flex-col bg-panel text-text selection:bg-accent/30 selection:text-white" style={viewportHeight ? { height: `${viewportHeight}px` } : undefined}>
       {/* Top Header Bar */}
       <header className="flex items-center gap-2 border-b border-border bg-panel/90 px-3 py-2.5 backdrop-blur-md z-30">
         <button
@@ -131,7 +150,7 @@ export default function App() {
         </ErrorBoundary>
       </main>
 
-      {/* Keyboard (cleanly docked right at bottom, zero vertical waste) */}
+      {/* Keyboard occupies its own bottom layout row */}
       {keyboardVisible && active && <QuickKeyboard sessionId={active.id} onHide={() => toggleKeyboard(false)} />}
 
       {showNew && <NewSessionDialog onClose={() => setShowNew(false)} />}
